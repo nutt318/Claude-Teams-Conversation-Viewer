@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Teams Conversation Viewer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; min-height: 100vh; padding: 24px; }
+    h1 { text-align: center; margin-bottom: 8px; font-size: 1.5rem; }
+    .subtitle { text-align: center; color: #9ca3af; margin-bottom: 24px; font-size: 0.9rem; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .error { background: rgba(127,29,29,0.5); border: 1px solid #ef4444; color: #fca5a5; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .hidden { display: none; }
+    .card { background: #1f2937; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 1rem; margin-bottom: 16px; color: #e5e7eb; }
+    .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 768px) { .upload-grid { grid-template-columns: 1fr; } }
+    .upload-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100px; border: 2px dashed #4b5563; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: #3b82f6; background: rgba(59,130,246,0.1); }
+    .upload-zone.loaded { border-color: #22c55e; background: rgba(34,197,94,0.1); }
+    .upload-zone input { display: none; }
+    .upload-zone span { color: #9ca3af; font-size: 0.8rem; margin-top: 8px; text-align: center; }
+    .upload-zone .label { font-weight: 500; color: #d1d5db; margin-bottom: 4px; }
+    input[type="text"], select { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
+    input[type="text"]:focus, select:focus { outline: none; border-color: #3b82f6; }
+    button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: background 0.2s; }
+    button:hover { background: #2563eb; }
+    button:disabled { background: #4b5563; cursor: not-allowed; }
+    button.secondary { background: #374151; }
+    button.secondary:hover { background: #4b5563; }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    @media (max-width: 768px) { .field-grid { grid-template-columns: 1fr; } }
+    .field-grid label { display: block; font-size: 0.75rem; color: #9ca3af; margin-bottom: 4px; }
+    
+    /* Main layout */
+    .main-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+    @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } }
+    
+    /* Sidebar */
+    .sidebar { background: #1f2937; border-radius: 8px; padding: 16px; height: fit-content; position: sticky; top: 24px; }
+    .sidebar h3 { font-size: 0.9rem; margin-bottom: 12px; color: #9ca3af; }
+    .sidebar input { margin-bottom: 12px; }
+    .user-list { max-height: 50vh; overflow-y: auto; }
+    .user-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 6px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; }
+    .user-item:hover { background: #374151; }
+    .user-item.selected { background: rgba(59,130,246,0.3); }
+    .user-item .name { font-size: 0.9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-item .count { font-size: 0.75rem; color: #9ca3af; background: #374151; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; margin-left: 8px; }
+    .user-item.selected .count { background: #1e40af; color: #bfdbfe; }
+    .sidebar-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151; display: flex; flex-direction: column; gap: 8px; }
+    .sidebar-actions button { width: 100%; font-size: 0.8rem; padding: 8px 12px; }
+    .file-list { margin-top: 12px; padding-top: 12px; border-top: 1px solid #374151; }
+    .file-list h4 { font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .file-item { font-size: 0.75rem; color: #9ca3af; padding: 4px 0; display: flex; justify-content: space-between; }
+    .file-item .count { color: #6b7280; }
+    
+    /* Conversations panel */
+    .conv-panel { min-width: 0; }
+    .conv-header-bar { background: #1f2937; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .conv-header-bar input { flex: 1; min-width: 200px; }
+    .conv-header-bar .info { font-size: 0.85rem; color: #9ca3af; }
+    .no-selection { background: #1f2937; border-radius: 8px; padding: 60px 20px; text-align: center; color: #6b7280; }
+    
+    .conversation { background: #1f2937; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+    .conv-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background 0.15s; }
+    .conv-header:hover { background: #283548; }
+    .conv-header .arrow { color: #6b7280; transition: transform 0.2s; font-size: 0.75rem; }
+    .conv-header.expanded .arrow { transform: rotate(90deg); }
+    .conv-title { flex: 1; min-width: 0; }
+    .conv-title h3 { font-size: 0.9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .conv-title p { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+    .conv-badge { font-size: 0.7rem; background: #374151; padding: 3px 8px; border-radius: 10px; white-space: nowrap; color: #9ca3af; }
+    .messages { border-top: 1px solid #374151; padding: 16px; max-height: 500px; overflow-y: auto; }
+    .message { padding: 12px; border-radius: 8px; margin-bottom: 8px; }
+    .message:last-child { margin-bottom: 0; }
+    .message.human { background: rgba(59,130,246,0.12); margin-right: 30px; border-left: 3px solid #3b82f6; }
+    .message.assistant { background: rgba(75,85,99,0.25); margin-left: 30px; border-left: 3px solid #4b5563; }
+    .message .sender { font-size: 0.7rem; color: #6b7280; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .message .text { font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Claude Teams Conversation Viewer</h1>
+    <p class="subtitle">Load both files, then click any user to view their conversations</p>
+    
+    <div id="error" class="error hidden"></div>
+
+    <!-- Setup Section -->
+    <div id="setup-section">
+      <div class="card">
+        <h2>Load Data Files</h2>
+        <div class="upload-grid">
+          <label class="upload-zone" id="user-zone" ondrop="handleDrop(event, 'user')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">👥 Users JSON</div>
+            <span id="user-status">Click or drag & drop</span>
+            <input type="file" id="user-input" accept=".json">
+          </label>
+          <label class="upload-zone" id="conv-zone" ondrop="handleDrop(event, 'conv')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">💬 Conversations JSON</div>
+            <span id="conv-status">Click or drag & drop (can add more later)</span>
+            <input type="file" id="conv-input" accept=".json" multiple>
+          </label>
+        </div>
+        
+        <div id="load-btn-container" class="hidden">
+          <button onclick="processData()" style="width:100%;">Load & View</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Viewer Section -->
+    <div id="viewer-section" class="hidden">
+      <div class="main-layout">
+        <!-- User Sidebar -->
+        <div class="sidebar">
+          <h3>Team Members</h3>
+          <input type="text" id="user-search" placeholder="Search users...">
+          <div class="user-list" id="user-list"></div>
+          
+          <div class="file-list">
+            <h4>Loaded Files</h4>
+            <div id="file-list-items"></div>
+          </div>
+          
+          <div class="sidebar-actions">
+            <label class="secondary" style="background:#374151;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:500;text-align:center;font-size:0.8rem;">
+              + Add More Conversations
+              <input type="file" id="add-conv-input" accept=".json" multiple style="display:none;">
+            </label>
+            <button class="secondary" onclick="startOver()">Start Over</button>
+          </div>
+        </div>
+        
+        <!-- Conversations Panel -->
+        <div class="conv-panel">
+          <div id="no-selection" class="no-selection">
+            ← Select a user to view their conversations
+          </div>
+          <div id="conv-container" class="hidden">
+            <div class="conv-header-bar">
+              <input type="text" id="search-input" placeholder="Search conversations...">
+              <button class="secondary" onclick="exportCSV()">Export CSV</button>
+              <span class="info" id="conv-count"></span>
+            </div>
+            <div id="conversations"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let usersData = null;
+    let conversationsData = [];
+    let loadedFiles = [];
+    let userMap = {};
+    let convByUser = {};
+    let selectedUserId = null;
+    let convUuidField = '';
+    let userUuidField = '';
+    let usernameField = '';
+
+    // File upload handlers
+    document.getElementById('user-input').addEventListener('change', (e) => loadUserFile(e.target.files[0]));
+    document.getElementById('conv-input').addEventListener('change', (e) => loadConvFiles(Array.from(e.target.files)));
+    document.getElementById('add-conv-input').addEventListener('change', (e) => addMoreConvFiles(e));
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      e.currentTarget.classList.remove('dragover');
+    }
+
+    function handleDrop(e, type) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));
+      if (!files.length) return;
+      
+      if (type === 'user') {
+        loadUserFile(files[0]);
+      } else {
+        loadConvFiles(files);
+      }
+    }
+
+    function loadUserFile(file) {
+      if (!file) return;
+      
+      document.getElementById('user-status').textContent = 'Loading...';
+      
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const json = JSON.parse(ev.target.result);
+          usersData = Array.isArray(json) ? json : [json];
+          document.getElementById('user-status').textContent = `✓ ${usersData.length.toLocaleString()} users`;
+          document.getElementById('user-zone').classList.add('loaded');
+          autoDetectUserFields();
+          hideError();
+          checkBothLoaded();
+        } catch (err) {
+          showError(`Error parsing users file: ${err.message}`);
+          document.getElementById('user-status').textContent = 'Error';
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function loadConvFiles(files) {
+      if (!files.length) return;
+      
+      document.getElementById('conv-status').textContent = 'Loading...';
+      conversationsData = [];
+      loadedFiles = [];
+      
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const json = JSON.parse(ev.target.result);
+            const data = Array.isArray(json) ? json : [json];
+            conversationsData = conversationsData.concat(data);
+            loadedFiles.push({ name: file.name, count: data.length });
+            loaded++;
+            
+            if (loaded === files.length) {
+              document.getElementById('conv-status').textContent = `✓ ${conversationsData.length.toLocaleString()} conversations (${files.length} file${files.length > 1 ? 's' : ''})`;
+              document.getElementById('conv-zone').classList.add('loaded');
+              autoDetectConvField();
+              hideError();
+              checkBothLoaded();
+            }
+          } catch (err) {
+            showError(`Error parsing ${file.name}: ${err.message}`);
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    function addMoreConvFiles(e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      
+      let loaded = 0;
+      let newCount = 0;
+      
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const json = JSON.parse(ev.target.result);
+            const data = Array.isArray(json) ? json : [json];
+            conversationsData = conversationsData.concat(data);
+            loadedFiles.push({ name: file.name, count: data.length });
+            newCount += data.length;
+            loaded++;
+            
+            if (loaded === files.length) {
+              reprocessConversations();
+              renderFileList();
+              renderUserList(document.getElementById('user-search').value);
+              if (selectedUserId) renderConversations();
+              hideError();
+            }
+          } catch (err) {
+            showError(`Error parsing ${file.name}: ${err.message}`);
+          }
+        };
+        reader.readAsText(file);
+      });
+      
+      e.target.value = '';
+    }
+
+    function checkBothLoaded() {
+      if (usersData && conversationsData.length) {
+        document.getElementById('load-btn-container').classList.remove('hidden');
+      }
+    }
+
+    function autoDetectUserFields() {
+      if (!usersData?.[0]) return;
+      const keys = Object.keys(usersData[0]);
+      
+      const uuidGuesses = ['uuid', 'id', 'user_id', 'userId'];
+      const nameGuesses = ['full_name', 'username', 'name', 'displayName', 'display_name', 'email'];
+      
+      for (const g of uuidGuesses) {
+        if (keys.includes(g)) { userUuidField = g; break; }
+      }
+      for (const g of nameGuesses) {
+        if (keys.includes(g)) { usernameField = g; break; }
+      }
+    }
+
+    function autoDetectConvField() {
+      if (!conversationsData?.[0]) return;
+      const conv = conversationsData[0];
+      
+      if (conv?.account?.uuid) {
+        convUuidField = 'account.uuid';
+      } else {
+        const keys = Object.keys(conv);
+        const guesses = ['user_id', 'userId', 'user_uuid', 'account_uuid', 'uuid'];
+        for (const g of guesses) {
+          if (keys.includes(g)) { convUuidField = g; break; }
+        }
+      }
+    }
+
+    function getNestedValue(obj, path) {
+      return path.split('.').reduce((acc, part) => acc?.[part], obj);
+    }
+
+    function processData() {
+      if (!userUuidField || !usernameField || !convUuidField) {
+        showError('Could not auto-detect field mappings. Please check your files.');
+        return;
+      }
+      
+      // Build user map
+      userMap = {};
+      usersData.forEach(u => {
+        const id = u[userUuidField];
+        if (id) {
+          userMap[id] = { uuid: id, name: u[usernameField] || 'Unknown', count: 0 };
+        }
+      });
+      
+      reprocessConversations();
+      
+      // Show viewer
+      document.getElementById('setup-section').classList.add('hidden');
+      document.getElementById('viewer-section').classList.remove('hidden');
+      renderUserList();
+      renderFileList();
+      hideError();
+    }
+
+    function reprocessConversations() {
+      // Reset counts
+      Object.values(userMap).forEach(u => u.count = 0);
+      
+      // Group conversations by user
+      convByUser = {};
+      conversationsData.forEach(c => {
+        const userId = getNestedValue(c, convUuidField);
+        if (!convByUser[userId]) convByUser[userId] = [];
+        convByUser[userId].push(c);
+        if (userMap[userId]) userMap[userId].count++;
+      });
+      
+      // Sort conversations by date
+      Object.keys(convByUser).forEach(id => {
+        convByUser[id].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      });
+    }
+
+    function renderFileList() {
+      const container = document.getElementById('file-list-items');
+      container.innerHTML = loadedFiles.map(f => `
+        <div class="file-item">
+          <span>${escapeHtml(f.name)}</span>
+          <span class="count">${f.count}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderUserList(filter = '') {
+      const list = document.getElementById('user-list');
+      const users = Object.values(userMap)
+        .filter(u => u.name.toLowerCase().includes((filter || '').toLowerCase()))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+      
+      list.innerHTML = users.map(u => `
+        <div class="user-item ${selectedUserId === u.uuid ? 'selected' : ''}" onclick="selectUser('${u.uuid}')">
+          <span class="name">${escapeHtml(u.name)}</span>
+          <span class="count">${u.count}</span>
+        </div>
+      `).join('');
+      
+      if (users.length === 0) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;color:#6b7280;font-size:0.85rem;">No users found</div>';
+      }
+    }
+
+    document.getElementById('user-search').addEventListener('input', (e) => {
+      renderUserList(e.target.value);
+    });
+
+    function selectUser(uuid) {
+      selectedUserId = uuid;
+      renderUserList(document.getElementById('user-search').value);
+      
+      document.getElementById('no-selection').classList.add('hidden');
+      document.getElementById('conv-container').classList.remove('hidden');
+      document.getElementById('search-input').value = '';
+      
+      renderConversations();
+    }
+
+    function renderConversations() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      const userConvs = convByUser[selectedUserId] || [];
+      const userName = userMap[selectedUserId]?.name || 'Unknown';
+      
+      const filtered = userConvs.filter(c => {
+        if (!search) return true;
+        return c.name?.toLowerCase().includes(search) ||
+          c.chat_messages?.some(m => m.text?.toLowerCase().includes(search));
+      });
+      
+      document.getElementById('conv-count').textContent = 
+        `${filtered.length} conversation${filtered.length !== 1 ? 's' : ''} for ${userName}`;
+      
+      const container = document.getElementById('conversations');
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-selection">No conversations found</div>';
+        return;
+      }
+      
+      container.innerHTML = filtered.slice(0, 100).map((conv, i) => `
+        <div class="conversation">
+          <div class="conv-header" onclick="toggleConv(this, ${i})">
+            <span class="arrow">▶</span>
+            <div class="conv-title">
+              <h3>${escapeHtml(conv.name || 'Untitled Conversation')}</h3>
+              <p>${formatDate(conv.created_at)}</p>
+            </div>
+            <span class="conv-badge">${conv.chat_messages?.length || 0} msgs</span>
+          </div>
+          <div class="messages hidden" id="msgs-${i}">
+            ${(conv.chat_messages || []).map(m => `
+              <div class="message ${m.sender}">
+                <div class="sender">${m.sender === 'human' ? escapeHtml(userName) : 'Claude'}</div>
+                <div class="text">${escapeHtml((m.text || '').substring(0, 3000))}${(m.text?.length || 0) > 3000 ? '...' : ''}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      
+      if (filtered.length > 100) {
+        container.innerHTML += '<p style="text-align:center;padding:20px;color:#6b7280;font-size:0.85rem;">Showing first 100. Use search to find specific conversations.</p>';
+      }
+    }
+
+    document.getElementById('search-input').addEventListener('input', renderConversations);
+
+    function toggleConv(header, index) {
+      header.classList.toggle('expanded');
+      document.getElementById('msgs-' + index).classList.toggle('hidden');
+    }
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function exportCSV() {
+      const userConvs = convByUser[selectedUserId] || [];
+      const userName = userMap[selectedUserId]?.name || 'Unknown';
+      
+      let csv = 'Conversation Name,Date,Message Count,First Message\n';
+      userConvs.forEach(c => {
+        const firstMsg = c.chat_messages?.[0]?.text?.substring(0, 100).replace(/[\n\r,]/g, ' ') || '';
+        csv += `"${(c.name || '').replace(/"/g, '""')}","${formatDate(c.created_at)}",${c.chat_messages?.length || 0},"${firstMsg.replace(/"/g, '""')}"\n`;
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${userName.replace(/[^a-z0-9]/gi, '_')}_conversations.csv`;
+      a.click();
+    }
+
+    function startOver() {
+      usersData = null;
+      conversationsData = [];
+      loadedFiles = [];
+      userMap = {};
+      convByUser = {};
+      selectedUserId = null;
+      
+      document.getElementById('user-zone').classList.remove('loaded');
+      document.getElementById('conv-zone').classList.remove('loaded');
+      document.getElementById('user-status').textContent = 'Click or drag & drop';
+      document.getElementById('conv-status').textContent = 'Click or drag & drop (can add more later)';
+      document.getElementById('load-btn-container').classList.add('hidden');
+      document.getElementById('user-input').value = '';
+      document.getElementById('conv-input').value = '';
+      
+      document.getElementById('viewer-section').classList.add('hidden');
+      document.getElementById('setup-section').classList.remove('hidden');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text || '';
+      return div.innerHTML;
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
