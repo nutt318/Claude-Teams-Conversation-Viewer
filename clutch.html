@@ -212,6 +212,16 @@
           </div>
           <div id="user-leaderboard"></div>
         </div>
+
+      <!-- Projects Overview -->
+      <div class="card" id="projects-overview" style="display:none;">
+        <div class="section-header">
+          <h3>Projects</h3>
+          <span id="projects-count" style="font-size:0.8rem;color:#6b7280;"></span>
+        </div>
+        <div id="projects-table"></div>
+      </div>
+
       </div>
 
       <!-- User Detail -->
@@ -225,6 +235,7 @@
         <div class="tabs">
           <button class="tab-btn active" onclick="switchTab('conversations')">💬 Conversations</button>
           <button class="tab-btn" onclick="switchTab('usage')">📊 Usage Summary</button>
+          <button class="tab-btn" onclick="switchTab('projects')">📁 Projects</button>
         </div>
 
         <!-- Conversations Tab -->
@@ -251,6 +262,11 @@
             </div>
             <div id="user-activity-table"></div>
           </div>
+        </div>
+
+        <!-- Projects Tab -->
+        <div id="tab-projects" class="hidden">
+          <div id="user-projects-container"></div>
         </div>
       </div>
 
@@ -434,7 +450,11 @@
           uuid: id,
           name: p.name || p.title || p.project_name || 'Unnamed Project',
           createdAt: p.created_at || p.createdAt || null,
-          ownerUuid: p.account?.uuid || p.owner_uuid || p.user_id || null
+          ownerUuid: p.creator?.uuid || p.account?.uuid || p.owner_uuid || p.user_id || null,
+          docs: p.docs || [],
+          description: p.description || '',
+          isPrivate: p.is_private ?? true,
+          isStarter: p.is_starter_project ?? false
         };
       });
     }
@@ -472,7 +492,12 @@
       userMap = {};
       usersData.forEach(u => {
         const id = u[userUuidField];
-        if (id) userMap[id] = { uuid: id, name: u[usernameField] || 'Unknown', count: 0 };
+        if (id) userMap[id] = {
+          uuid: id,
+          name: u[usernameField] || u.email_address || u.email || 'Unknown',
+          email: u.email_address || u.email || '',
+          count: 0
+        };
       });
       reprocessConversations();
       document.getElementById('setup-section').classList.add('hidden');
@@ -532,6 +557,7 @@
 
       renderTeamActivity();
       renderUserLeaderboard();
+      renderTeamProjects();
     }
 
     function switchTeamPeriod(period) {
@@ -629,12 +655,17 @@
     function switchTab(tab) {
       activeTab = tab;
       document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-        btn.classList.toggle('active', (i === 0 && tab === 'conversations') || (i === 1 && tab === 'usage'));
+        btn.classList.toggle('active',
+          (i === 0 && tab === 'conversations') ||
+          (i === 1 && tab === 'usage') ||
+          (i === 2 && tab === 'projects'));
       });
       document.getElementById('tab-conversations').classList.toggle('hidden', tab !== 'conversations');
       document.getElementById('tab-usage').classList.toggle('hidden', tab !== 'usage');
+      document.getElementById('tab-projects').classList.toggle('hidden', tab !== 'projects');
       if (tab === 'conversations') renderConversations();
       if (tab === 'usage') renderUserUsage();
+      if (tab === 'projects') renderUserProjects();
     }
 
     function renderConversations() {
@@ -853,6 +884,76 @@
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');
       document.getElementById('setup-section').classList.remove('hidden');
+    }
+
+    function renderTeamProjects() {
+      const projects = Object.values(projectMap);
+      const el = document.getElementById('projects-overview');
+      if (!projects.length) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      document.getElementById('projects-count').textContent =
+        projects.length + ' project' + (projects.length !== 1 ? 's' : '');
+      const sorted = [...projects].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      document.getElementById('projects-table').innerHTML = `
+        <table class="data-table">
+          <thead><tr>
+            <th>Project</th><th>Creator</th><th>Created</th><th>Docs</th><th>Visibility</th>
+          </tr></thead>
+          <tbody>
+            ${sorted.map(p => {
+              const creator = userMap[p.ownerUuid];
+              const vis = p.isStarter ? 'Starter' : p.isPrivate ? 'Private' : 'Shared';
+              const visBg = p.isStarter ? '#1d4ed8' : p.isPrivate ? '#374151' : 'rgba(34,197,94,0.15)';
+              const visCol = p.isStarter ? '#bfdbfe' : p.isPrivate ? '#9ca3af' : '#4ade80';
+              return `<tr class="non-clickable">
+                <td>
+                  <div style="font-weight:500;">${escapeHtml(p.name)}</div>
+                  ${p.description ? `<div style="font-size:0.75rem;color:#6b7280;margin-top:2px;">${escapeHtml(p.description.substring(0, 80))}${p.description.length > 80 ? '...' : ''}</div>` : ''}
+                </td>
+                <td>${escapeHtml(creator?.name || '--')}</td>
+                <td style="white-space:nowrap;">${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '--'}</td>
+                <td>${p.docs.length}</td>
+                <td><span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:${visBg};color:${visCol};">${vis}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderUserProjects() {
+      const userProjects = Object.values(projectMap).filter(p => p.ownerUuid === selectedUserId);
+      const container = document.getElementById('user-projects-container');
+      if (!userProjects.length) {
+        container.innerHTML = '<div class="no-data">No projects created by this user</div>';
+        return;
+      }
+      const sorted = [...userProjects].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      container.innerHTML = sorted.map(p => {
+        const vis = p.isStarter ? 'Starter' : p.isPrivate ? 'Private' : 'Shared';
+        const visBg = p.isStarter ? '#1d4ed8' : p.isPrivate ? '#374151' : 'rgba(34,197,94,0.15)';
+        const visCol = p.isStarter ? '#bfdbfe' : p.isPrivate ? '#9ca3af' : '#4ade80';
+        return `
+        <div class="conversation" style="margin-bottom:10px;">
+          <div style="padding:14px 16px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:600;font-size:0.95rem;">${escapeHtml(p.name)}</div>
+                ${p.description ? `<div style="font-size:0.82rem;color:#9ca3af;margin-top:4px;">${escapeHtml(p.description)}</div>` : ''}
+                <div style="font-size:0.75rem;color:#6b7280;margin-top:6px;">Created ${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '--'}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;">
+                ${p.docs.length ? `<span class="conv-badge">docs: ${p.docs.length}</span>` : ''}
+                <span style="font-size:0.75rem;padding:3px 8px;border-radius:10px;background:${visBg};color:${visCol};">${vis}</span>
+              </div>
+            </div>
+            ${p.docs.length ? `
+              <div style="margin-top:10px;border-top:1px solid #374151;padding-top:10px;">
+                ${p.docs.map(d => `<div style="font-size:0.8rem;color:#9ca3af;padding:3px 0;">${escapeHtml(d.filename)}</div>`).join('')}
+              </div>` : ''}
+          </div>
+        </div>`;
+      }).join('');
     }
 
     function escapeHtml(text) {
