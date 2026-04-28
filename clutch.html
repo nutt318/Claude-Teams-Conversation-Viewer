@@ -24,6 +24,20 @@
     .upload-zone input { display: none; }
     .upload-zone span { color: #9ca3af; font-size: 0.8rem; margin-top: 8px; text-align: center; }
     .upload-zone .label { font-weight: 500; color: #d1d5db; margin-bottom: 4px; }
+    .folder-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 20px; border: 2px dashed #3b82f6; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: rgba(59,130,246,0.05); margin-bottom: 16px; text-align: center; }
+    .folder-zone:hover { background: rgba(59,130,246,0.12); border-color: #60a5fa; }
+    .folder-zone.loaded { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+    .folder-icon { font-size: 2rem; margin-bottom: 6px; }
+    .folder-label { font-size: 1rem; font-weight: 600; color: #e5e7eb; margin-bottom: 4px; }
+    .folder-sub { font-size: 0.8rem; color: #6b7280; max-width: 380px; }
+    .detected-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px; font-size: 0.85rem; }
+    .detected-row.found { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
+    .detected-row.missing { opacity: 0.5; }
+    .det-icon { width: 22px; }
+    .det-label { flex: 1; color: #9ca3af; }
+    .det-val { font-weight: 500; color: #f3f4f6; font-size: 0.8rem; }
+    .or-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: #4b5563; font-size: 0.8rem; }
+    .or-divider::before, .or-divider::after { content: ""; flex: 1; height: 1px; background: #374151; }
     input[type="text"] { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
     input[type="text"]:focus { outline: none; border-color: #3b82f6; }
     button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: background 0.2s; }
@@ -113,6 +127,30 @@
     <div id="setup-section">
       <div class="card">
         <h2>Load Data Files</h2>
+
+        <!-- Folder picker (primary) -->
+        <label class="folder-zone" id="folder-zone">
+          <div class="folder-icon">📁</div>
+          <div class="folder-label">Select Export Folder</div>
+          <div class="folder-sub" id="folder-status">Click to select your Claude Teams export folder — files are detected automatically</div>
+          <input type="file" id="folder-input" webkitdirectory multiple style="display:none;">
+        </label>
+
+        <!-- Detected files list -->
+        <div id="detected-files" class="hidden">
+          <div class="detected-row" id="det-users">
+            <span class="det-icon">👥</span><span class="det-label">Users</span><span class="det-val" id="det-users-val">—</span>
+          </div>
+          <div class="detected-row" id="det-convs">
+            <span class="det-icon">💬</span><span class="det-label">Conversations</span><span class="det-val" id="det-convs-val">—</span>
+          </div>
+          <div class="detected-row" id="det-projects">
+            <span class="det-icon">📂</span><span class="det-label">Projects</span><span class="det-val" id="det-projects-val">—</span>
+          </div>
+        </div>
+
+        <!-- Or pick individually -->
+        <div class="or-divider"><span>or pick files individually</span></div>
         <div class="upload-grid">
           <label class="upload-zone" id="user-zone" ondrop="handleDrop(event, 'user')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
             <div class="label">👥 Users JSON</div>
@@ -121,10 +159,16 @@
           </label>
           <label class="upload-zone" id="conv-zone" ondrop="handleDrop(event, 'conv')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
             <div class="label">💬 Conversations JSON</div>
-            <span id="conv-status">Click or drag &amp; drop (can add more later)</span>
+            <span id="conv-status">Click or drag &amp; drop</span>
             <input type="file" id="conv-input" accept=".json" multiple>
           </label>
+          <label class="upload-zone" id="proj-zone" ondrop="handleDrop(event, 'proj')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">📂 Projects JSON <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
+            <span id="proj-status">Click or drag &amp; drop</span>
+            <input type="file" id="proj-input" accept=".json">
+          </label>
         </div>
+
         <div id="load-btn-container" class="hidden">
           <button onclick="processData()" style="width:100%;">Load &amp; View</button>
         </div>
@@ -216,7 +260,9 @@
   <script>
     let usersData = null;
     let conversationsData = [];
+    let projectsData = [];
     let loadedFiles = [];
+    let projectMap = {};
     let userMap = {};
     let convByUser = {};
     let selectedUserId = null;
@@ -230,6 +276,8 @@
     // File upload handlers
     document.getElementById('user-input').addEventListener('change', e => loadUserFile(e.target.files[0]));
     document.getElementById('conv-input').addEventListener('change', e => loadConvFiles(Array.from(e.target.files)));
+    document.getElementById('proj-input').addEventListener('change', e => loadProjectFile(e.target.files[0]));
+    document.getElementById('folder-input').addEventListener('change', e => handleFolderSelect(Array.from(e.target.files)));
     document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
 
     function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
@@ -239,7 +287,9 @@
       e.currentTarget.classList.remove('dragover');
       const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));
       if (!files.length) return;
-      type === 'user' ? loadUserFile(files[0]) : loadConvFiles(files);
+      if (type === 'user') loadUserFile(files[0]);
+      else if (type === 'proj') loadProjectFile(files[0]);
+      else loadConvFiles(files);
     }
 
     function loadUserFile(file) {
@@ -318,6 +368,76 @@
       });
       e.target.value = '';
     });
+
+    function handleFolderSelect(files) {
+      const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
+      if (!jsonFiles.length) { showError('No JSON files found in the selected folder.'); return; }
+
+      let usersFile = null, convFiles = [], projFile = null;
+      jsonFiles.forEach(f => {
+        const name = f.name.toLowerCase();
+        if (name.includes('user')) usersFile = f;
+        else if (name.includes('conversation')) convFiles.push(f);
+        else if (name.includes('project')) projFile = f;
+      });
+
+      document.getElementById('folder-zone').classList.add('loaded');
+      document.getElementById('folder-status').textContent = jsonFiles.length + ' JSON file' + (jsonFiles.length !== 1 ? 's' : '') + ' found';
+      document.getElementById('detected-files').classList.remove('hidden');
+
+      const setRow = (rowId, valId, file, optional) => {
+        const row = document.getElementById(rowId);
+        if (file) {
+          row.classList.add('found'); row.classList.remove('missing');
+          document.getElementById(valId).textContent = Array.isArray(file) ? file.map(f => f.name).join(', ') : file.name;
+        } else {
+          row.classList.add('missing');
+          document.getElementById(valId).textContent = optional ? 'Not found (optional)' : 'Not found';
+        }
+      };
+
+      setRow('det-users', 'det-users-val', usersFile, false);
+      setRow('det-convs', 'det-convs-val', convFiles.length ? convFiles : null, false);
+      setRow('det-projects', 'det-projects-val', projFile, true);
+
+      if (usersFile) loadUserFile(usersFile);
+      if (convFiles.length) loadConvFiles(convFiles);
+      if (projFile) loadProjectFile(projFile);
+    }
+
+    function loadProjectFile(file) {
+      if (!file) return;
+      document.getElementById('proj-status').textContent = 'Loading...';
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const json = JSON.parse(ev.target.result);
+          projectsData = Array.isArray(json) ? json : [json];
+          document.getElementById('proj-status').textContent = '\u2713 ' + projectsData.length.toLocaleString() + ' projects';
+          document.getElementById('proj-zone').classList.add('loaded');
+          buildProjectMap();
+          hideError();
+        } catch (err) {
+          showError('Error parsing projects file: ' + err.message);
+          document.getElementById('proj-status').textContent = 'Error';
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function buildProjectMap() {
+      projectMap = {};
+      projectsData.forEach(p => {
+        const id = p.uuid || p.id || p.project_id;
+        if (!id) return;
+        projectMap[id] = {
+          uuid: id,
+          name: p.name || p.title || p.project_name || 'Unnamed Project',
+          createdAt: p.created_at || p.createdAt || null,
+          ownerUuid: p.account?.uuid || p.owner_uuid || p.user_id || null
+        };
+      });
+    }
 
     function checkBothLoaded() {
       if (usersData && conversationsData.length) {
@@ -403,10 +523,10 @@
           <div class="stat-value">${totalMsgs.toLocaleString()}</div>
           <div class="stat-sub">avg ${allConvs.length ? (totalMsgs / allConvs.length).toFixed(1) : 0} per conversation</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Loaded Files</div>
-          <div class="stat-value">${loadedFiles.length}</div>
-          <div class="stat-sub">${loadedFiles.map(f => f.name).join(', ').substring(0, 40) || '—'}</div>
+                <div class="stat-card">
+          <div class="stat-label">Projects</div>
+          <div class="stat-value">${Object.keys(projectMap).length || '\u2014'}</div>
+          <div class="stat-sub">${Object.keys(projectMap).length ? Object.keys(projectMap).length + ' projects loaded' : 'No projects file loaded'}</div>
         </div>
       `;
 
@@ -715,11 +835,20 @@
       selectedUserId = null;
       document.getElementById('user-zone').classList.remove('loaded');
       document.getElementById('conv-zone').classList.remove('loaded');
+      document.getElementById('proj-zone').classList.remove('loaded');
+      document.getElementById('folder-zone').classList.remove('loaded');
       document.getElementById('user-status').textContent = 'Click or drag & drop';
-      document.getElementById('conv-status').textContent = 'Click or drag & drop (can add more later)';
+      document.getElementById('conv-status').textContent = 'Click or drag & drop';
+      document.getElementById('proj-status').textContent = 'Click or drag & drop';
+      document.getElementById('folder-status').textContent = 'Click to select your Claude Teams export folder \u2014 files are detected automatically';
+      document.getElementById('detected-files').classList.add('hidden');
       document.getElementById('load-btn-container').classList.add('hidden');
       document.getElementById('user-input').value = '';
       document.getElementById('conv-input').value = '';
+      document.getElementById('proj-input').value = '';
+      document.getElementById('folder-input').value = '';
+      projectsData = [];
+      projectMap = {};
       document.getElementById('viewer-section').classList.add('hidden');
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');

@@ -10,12 +10,14 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 
 ## Features
 
-- **View conversations by user** — Select any team member to instantly see all their conversations
+- **Team overview dashboard** — Instantly see team-wide stats and activity after loading
+- **View conversations by user** — Click any team member to see all their conversations
 - **Usage summary** — See daily, weekly, and monthly conversation counts per user
+- **Projects support** — Load your projects export to see project activity alongside conversations
+- **Folder picker** — Select your entire export folder and CLUTCH auto-detects the right files
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
 - **Export to CSV** — Download a user's conversation summary as a spreadsheet
-- **Drag & drop support** — Drag JSON files directly onto the upload zones
 - **100% offline** — Works without an internet connection, all data stays on your machine
 
 ## Screenshots
@@ -27,9 +29,11 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 ## Requirements
 
 - A modern web browser (Chrome, Firefox, Edge, Safari)
-- Two JSON files from your Claude Teams export:
+- **Organisation admin access** — Only the original org admin can export data from Claude Teams. You must be the admin of the Claude Teams organisation to generate the export files used by this tool.
+- JSON files from your Claude Teams export:
   - **Users file** — Contains user UUIDs and names
   - **Conversations file(s)** — Contains conversation data with user UUID references
+  - **Projects file** *(optional)* — Contains project data associated with your organisation
 
 ## Installation
 
@@ -37,6 +41,13 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 2. Open it in your web browser (double-click or drag into browser)
 
 That's it — no server, no dependencies, no installation required.
+
+## Getting Your Export Files
+
+1. Log in to [claude.ai](https://claude.ai) as an **organisation admin**
+2. Navigate to **Settings → Organisation → Export data**
+3. Download and extract the export — you'll get a folder containing JSON files including `users.json`, `conversations.json`, and `projects.json`
+4. In CLUTCH, click **"Select Export Folder"** and point it at the extracted folder — files are auto-detected automatically
 
 ## Usage
 
