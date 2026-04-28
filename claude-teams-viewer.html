@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude Teams Conversation Viewer</title>
+  <title>CLUTCH — Claude's Live Usage & Team Conversation History</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; min-height: 100vh; padding: 24px; }
@@ -78,12 +78,37 @@
     .message.assistant { background: rgba(75,85,99,0.25); margin-left: 30px; border-left: 3px solid #4b5563; }
     .message .sender { font-size: 0.7rem; color: #6b7280; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .message .text { font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tab-btn { background: #374151; color: #9ca3af; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; }
+    .tab-btn:hover { background: #4b5563; color: #f3f4f6; }
+    .tab-btn.active { background: #3b82f6; color: white; }
+
+    /* Usage summary */
+    .usage-period-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .period-btn { background: #374151; color: #9ca3af; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.15s; }
+    .period-btn:hover { background: #4b5563; color: #f3f4f6; }
+    .period-btn.active { background: #1d4ed8; color: #bfdbfe; }
+    .usage-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .usage-table th { text-align: left; padding: 8px 12px; color: #6b7280; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #374151; }
+    .usage-table td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
+    .usage-table tr:last-child td { border-bottom: none; }
+    .usage-table tr:hover td { background: #283548; }
+    .bar-cell { width: 180px; }
+    .bar-wrap { background: #374151; border-radius: 4px; height: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s; }
+    .usage-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .usage-stat { background: #374151; border-radius: 8px; padding: 14px 16px; }
+    .usage-stat .stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .usage-stat .stat-value { font-size: 1.4rem; font-weight: 600; color: #f3f4f6; }
+    .usage-stat .stat-sub { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Claude Teams Conversation Viewer</h1>
-    <p class="subtitle">Load both files, then click any user to view their conversations</p>
+    <h1>CLUTCH</h1>
+    <p class="subtitle">Claude's Live Usage & Team Conversation History — Load both files, then click any user to explore</p>
     
     <div id="error" class="error hidden"></div>
 
@@ -139,12 +164,32 @@
             ← Select a user to view their conversations
           </div>
           <div id="conv-container" class="hidden">
-            <div class="conv-header-bar">
-              <input type="text" id="search-input" placeholder="Search conversations...">
-              <button class="secondary" onclick="exportCSV()">Export CSV</button>
-              <span class="info" id="conv-count"></span>
+            <!-- Tabs -->
+            <div class="tabs">
+              <button class="tab-btn active" onclick="switchTab('conversations')">💬 Conversations</button>
+              <button class="tab-btn" onclick="switchTab('usage')">📊 Usage Summary</button>
             </div>
-            <div id="conversations"></div>
+
+            <!-- Conversations Tab -->
+            <div id="tab-conversations">
+              <div class="conv-header-bar">
+                <input type="text" id="search-input" placeholder="Search conversations...">
+                <button class="secondary" onclick="exportCSV()">Export CSV</button>
+                <span class="info" id="conv-count"></span>
+              </div>
+              <div id="conversations"></div>
+            </div>
+
+            <!-- Usage Summary Tab -->
+            <div id="tab-usage" class="hidden">
+              <div class="usage-stat-grid" id="usage-stats"></div>
+              <div class="usage-period-tabs">
+                <button class="period-btn active" onclick="switchPeriod('daily')">Daily</button>
+                <button class="period-btn" onclick="switchPeriod('weekly')">Weekly</button>
+                <button class="period-btn" onclick="switchPeriod('monthly')">Monthly</button>
+              </div>
+              <div id="usage-table-container"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -405,6 +450,7 @@
       document.getElementById('search-input').value = '';
       
       renderConversations();
+      if (activeTab === 'usage') renderUsage();
     }
 
     function renderConversations() {
@@ -455,6 +501,134 @@
     }
 
     document.getElementById('search-input').addEventListener('input', renderConversations);
+
+    // Tab switching
+    let activeTab = 'conversations';
+    let activePeriod = 'daily';
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (i === 0 && tab === 'conversations') || (i === 1 && tab === 'usage'));
+      });
+      document.getElementById('tab-conversations').classList.toggle('hidden', tab !== 'conversations');
+      document.getElementById('tab-usage').classList.toggle('hidden', tab !== 'usage');
+      if (tab === 'usage') renderUsage();
+    }
+
+    function switchPeriod(period) {
+      activePeriod = period;
+      document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === period);
+      });
+      renderUsage();
+    }
+
+    function renderUsage() {
+      const userConvs = convByUser[selectedUserId] || [];
+      const userName = userMap[selectedUserId]?.name || 'Unknown';
+
+      if (!userConvs.length) {
+        document.getElementById('usage-table-container').innerHTML =
+          '<div class="no-selection">No conversations to summarise</div>';
+        return;
+      }
+
+      // Stats
+      const totalMsgs = userConvs.reduce((sum, c) => sum + (c.chat_messages?.length || 0), 0);
+      const humanMsgs = userConvs.reduce((sum, c) =>
+        sum + (c.chat_messages?.filter(m => m.sender === 'human').length || 0), 0);
+      const dates = userConvs.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
+      const earliest = dates.length ? new Date(Math.min(...dates)) : null;
+      const latest = dates.length ? new Date(Math.max(...dates)) : null;
+      const spanDays = earliest && latest
+        ? Math.max(1, Math.round((latest - earliest) / 86400000) + 1) : 1;
+      const avgPerDay = (userConvs.length / spanDays).toFixed(1);
+
+      document.getElementById('usage-stats').innerHTML = `
+        <div class="usage-stat">
+          <div class="stat-label">Total Conversations</div>
+          <div class="stat-value">${userConvs.length.toLocaleString()}</div>
+          <div class="stat-sub">${humanMsgs.toLocaleString()} user messages</div>
+        </div>
+        <div class="usage-stat">
+          <div class="stat-label">Total Messages</div>
+          <div class="stat-value">${totalMsgs.toLocaleString()}</div>
+          <div class="stat-sub">avg ${(totalMsgs / userConvs.length).toFixed(1)} per conversation</div>
+        </div>
+        <div class="usage-stat">
+          <div class="stat-label">Avg per Day</div>
+          <div class="stat-value">${avgPerDay}</div>
+          <div class="stat-sub">across ${spanDays} day${spanDays !== 1 ? 's' : ''} of activity</div>
+        </div>
+      `;
+
+      // Build period buckets
+      const buckets = {};
+      userConvs.forEach(c => {
+        const d = new Date(c.created_at);
+        if (isNaN(d)) return;
+        const key = getPeriodKey(d, activePeriod);
+        if (!buckets[key]) buckets[key] = { key, label: getPeriodLabel(d, activePeriod), count: 0, msgs: 0 };
+        buckets[key].count++;
+        buckets[key].msgs += c.chat_messages?.length || 0;
+      });
+
+      const rows = Object.values(buckets).sort((a, b) => b.key.localeCompare(a.key));
+      const maxCount = Math.max(...rows.map(r => r.count), 1);
+
+      document.getElementById('usage-table-container').innerHTML = `
+        <table class="usage-table">
+          <thead>
+            <tr>
+              <th>${activePeriod.charAt(0).toUpperCase() + activePeriod.slice(1)}</th>
+              <th>Conversations</th>
+              <th>Messages</th>
+              <th class="bar-cell">Activity</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${escapeHtml(r.label)}</td>
+                <td>${r.count}</td>
+                <td>${r.msgs}</td>
+                <td class="bar-cell">
+                  <div class="bar-wrap">
+                    <div class="bar-fill" style="width:${Math.round((r.count / maxCount) * 100)}%"></div>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function getPeriodKey(date, period) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      if (period === 'daily') return `${y}-${m}-${d}`;
+      if (period === 'weekly') {
+        const jan1 = new Date(y, 0, 1);
+        const week = String(Math.ceil(((date - jan1) / 86400000 + jan1.getDay() + 1) / 7)).padStart(2, '0');
+        return `${y}-W${week}`;
+      }
+      return `${y}-${m}`;
+    }
+
+    function getPeriodLabel(date, period) {
+      if (period === 'daily') return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      if (period === 'weekly') {
+        // Start of week (Monday)
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(date.setDate(diff));
+        return 'Week of ' + monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    }
 
     function toggleConv(header, index) {
       header.classList.toggle('expanded');

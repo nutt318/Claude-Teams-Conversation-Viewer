@@ -1,19 +1,28 @@
-# Claude Teams Conversation Viewer
+# CLUTCH — Claude's Live Usage & Team Conversation History
 
-A lightweight, offline HTML tool for viewing Claude Teams conversation exports organized by user.
+![CLUTCH](images/clutch-dark-tag.jpg)
+
+A lightweight, offline HTML tool for viewing Claude Teams conversation exports organized by user — with daily, weekly, and monthly usage summaries.
 
 ## Overview
 
-This tool allows Claude Teams administrators to merge user data with conversation exports, making it easy to browse conversations by team member. All processing happens locally in your browser — no data is sent anywhere.
+CLUTCH allows Claude Teams administrators to merge user data with conversation exports, making it easy to browse conversations by team member and track usage trends over time. All processing happens locally in your browser — no data is sent anywhere.
 
 ## Features
 
 - **View conversations by user** — Select any team member to instantly see all their conversations
+- **Usage summary** — See daily, weekly, and monthly conversation counts per user
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
 - **Export to CSV** — Download a user's conversation summary as a spreadsheet
 - **Drag & drop support** — Drag JSON files directly onto the upload zones
 - **100% offline** — Works without an internet connection, all data stays on your machine
+
+## Screenshots
+
+![CLUTCH Dark](images/clutch-dark-notag.jpg)
+
+![CLUTCH Light](images/clutch-light-tag.jpg)
 
 ## Requirements
 
@@ -24,7 +33,7 @@ This tool allows Claude Teams administrators to merge user data with conversatio
 
 ## Installation
 
-1. Download the `claude-teams-viewer.html` file
+1. Download the `clutch.html` file
 2. Open it in your web browser (double-click or drag into browser)
 
 That's it — no server, no dependencies, no installation required.
@@ -45,6 +54,7 @@ Once both files are loaded, click the button to process the data.
 ### Step 3: Browse Conversations
 
 - Click any user in the left sidebar to view their conversations
+- Switch between **Conversations** and **Usage Summary** tabs to see activity trends
 - Use the search box to filter conversations
 - Click a conversation to expand and read the messages
 - Use "Export CSV" to download the selected user's conversation list
@@ -95,7 +105,7 @@ The tool looks for common field names: `uuid`, `id`, `user_id` for the identifie
         "created_at": "2025-01-15T10:30:00Z"
       },
       {
-        "uuid": "msg-2", 
+        "uuid": "msg-2",
         "text": "Hi! How can I help?",
         "sender": "assistant",
         "created_at": "2025-01-15T10:30:05Z"
