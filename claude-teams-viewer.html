@@ -7,13 +7,15 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; min-height: 100vh; padding: 24px; }
-    h1 { text-align: center; margin-bottom: 8px; font-size: 1.5rem; }
-    .subtitle { text-align: center; color: #9ca3af; margin-bottom: 24px; font-size: 0.9rem; }
-    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 4px; font-size: 1.6rem; letter-spacing: 1px; }
+    .subtitle { text-align: center; color: #9ca3af; margin-bottom: 24px; font-size: 0.85rem; }
+    .container { max-width: 1200px; margin: 0 auto; }
     .error { background: rgba(127,29,29,0.5); border: 1px solid #ef4444; color: #fca5a5; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
     .hidden { display: none; }
     .card { background: #1f2937; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
     .card h2 { font-size: 1rem; margin-bottom: 16px; color: #e5e7eb; }
+
+    /* Upload */
     .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     @media (max-width: 768px) { .upload-grid { grid-template-columns: 1fr; } }
     .upload-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100px; border: 2px dashed #4b5563; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
@@ -22,46 +24,62 @@
     .upload-zone input { display: none; }
     .upload-zone span { color: #9ca3af; font-size: 0.8rem; margin-top: 8px; text-align: center; }
     .upload-zone .label { font-weight: 500; color: #d1d5db; margin-bottom: 4px; }
-    input[type="text"], select { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
-    input[type="text"]:focus, select:focus { outline: none; border-color: #3b82f6; }
+    input[type="text"] { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
+    input[type="text"]:focus { outline: none; border-color: #3b82f6; }
     button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: background 0.2s; }
     button:hover { background: #2563eb; }
     button:disabled { background: #4b5563; cursor: not-allowed; }
     button.secondary { background: #374151; }
     button.secondary:hover { background: #4b5563; }
-    .field-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-    @media (max-width: 768px) { .field-grid { grid-template-columns: 1fr; } }
-    .field-grid label { display: block; font-size: 0.75rem; color: #9ca3af; margin-bottom: 4px; }
-    
-    /* Main layout */
-    .main-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
-    @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } }
-    
-    /* Sidebar */
-    .sidebar { background: #1f2937; border-radius: 8px; padding: 16px; height: fit-content; position: sticky; top: 24px; }
-    .sidebar h3 { font-size: 0.9rem; margin-bottom: 12px; color: #9ca3af; }
-    .sidebar input { margin-bottom: 12px; }
-    .user-list { max-height: 50vh; overflow-y: auto; }
-    .user-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 6px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; }
-    .user-item:hover { background: #374151; }
-    .user-item.selected { background: rgba(59,130,246,0.3); }
-    .user-item .name { font-size: 0.9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .user-item .count { font-size: 0.75rem; color: #9ca3af; background: #374151; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; margin-left: 8px; }
-    .user-item.selected .count { background: #1e40af; color: #bfdbfe; }
-    .sidebar-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151; display: flex; flex-direction: column; gap: 8px; }
-    .sidebar-actions button { width: 100%; font-size: 0.8rem; padding: 8px 12px; }
-    .file-list { margin-top: 12px; padding-top: 12px; border-top: 1px solid #374151; }
-    .file-list h4 { font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .file-item { font-size: 0.75rem; color: #9ca3af; padding: 4px 0; display: flex; justify-content: space-between; }
-    .file-item .count { color: #6b7280; }
-    
-    /* Conversations panel */
-    .conv-panel { min-width: 0; }
-    .conv-header-bar { background: #1f2937; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+    /* Stat cards */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    @media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card { background: #1f2937; border-radius: 8px; padding: 16px 18px; }
+    .stat-card .stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-card .stat-value { font-size: 1.6rem; font-weight: 700; color: #f3f4f6; }
+    .stat-card .stat-sub { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
+
+    /* Period tabs */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .section-header h3 { font-size: 0.9rem; color: #9ca3af; font-weight: 500; }
+    .period-tabs { display: flex; gap: 4px; }
+    .period-btn { background: #374151; color: #9ca3af; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.78rem; font-weight: 500; transition: all 0.15s; }
+    .period-btn:hover { background: #4b5563; color: #f3f4f6; }
+    .period-btn.active { background: #1d4ed8; color: #bfdbfe; }
+
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .data-table th { text-align: left; padding: 8px 12px; color: #6b7280; font-weight: 500; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #374151; }
+    .data-table td { padding: 10px 12px; border-bottom: 1px solid #1a2332; }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover td { background: #283548; cursor: pointer; }
+    .data-table tbody tr.non-clickable:hover td { cursor: default; }
+    .bar-wrap { background: #374151; border-radius: 4px; height: 8px; overflow: hidden; min-width: 80px; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .bar-fill.blue { background: #3b82f6; }
+    .bar-fill.teal { background: #14b8a6; }
+    .rank { font-size: 0.75rem; color: #6b7280; width: 28px; }
+    .user-name-cell { font-weight: 500; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab-btn { background: #374151; color: #9ca3af; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; }
+    .tab-btn:hover { background: #4b5563; color: #f3f4f6; }
+    .tab-btn.active { background: #3b82f6; color: white; }
+
+    /* User detail */
+    .back-btn { display: inline-flex; align-items: center; gap: 6px; background: #374151; color: #9ca3af; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; margin-bottom: 16px; transition: all 0.15s; }
+    .back-btn:hover { background: #4b5563; color: #f3f4f6; }
+    .user-detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+    .user-detail-header h2 { font-size: 1.3rem; }
+    .user-detail-header .meta { font-size: 0.82rem; color: #6b7280; }
+
+    /* Conversations */
+    .conv-header-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
     .conv-header-bar input { flex: 1; min-width: 200px; }
     .conv-header-bar .info { font-size: 0.85rem; color: #9ca3af; }
-    .no-selection { background: #1f2937; border-radius: 8px; padding: 60px 20px; text-align: center; color: #6b7280; }
-    
+    .no-data { background: #1f2937; border-radius: 8px; padding: 40px 20px; text-align: center; color: #6b7280; }
     .conversation { background: #1f2937; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
     .conv-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background 0.15s; }
     .conv-header:hover { background: #283548; }
@@ -79,37 +97,16 @@
     .message .sender { font-size: 0.7rem; color: #6b7280; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .message .text { font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
 
-    /* Tabs */
-    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-    .tab-btn { background: #374151; color: #9ca3af; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; }
-    .tab-btn:hover { background: #4b5563; color: #f3f4f6; }
-    .tab-btn.active { background: #3b82f6; color: white; }
-
-    /* Usage summary */
-    .usage-period-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-    .period-btn { background: #374151; color: #9ca3af; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.15s; }
-    .period-btn:hover { background: #4b5563; color: #f3f4f6; }
-    .period-btn.active { background: #1d4ed8; color: #bfdbfe; }
-    .usage-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    .usage-table th { text-align: left; padding: 8px 12px; color: #6b7280; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #374151; }
-    .usage-table td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
-    .usage-table tr:last-child td { border-bottom: none; }
-    .usage-table tr:hover td { background: #283548; }
-    .bar-cell { width: 180px; }
-    .bar-wrap { background: #374151; border-radius: 4px; height: 8px; overflow: hidden; }
-    .bar-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s; }
-    .usage-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
-    .usage-stat { background: #374151; border-radius: 8px; padding: 14px 16px; }
-    .usage-stat .stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-    .usage-stat .stat-value { font-size: 1.4rem; font-weight: 600; color: #f3f4f6; }
-    .usage-stat .stat-sub { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
+    /* Sidebar actions */
+    .top-actions { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .top-actions button, .top-actions label { font-size: 0.82rem; padding: 7px 14px; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>CLUTCH</h1>
-    <p class="subtitle">Claude's Live Usage & Team Conversation History — Load both files, then click any user to explore</p>
-    
+    <p class="subtitle">Claude's Live Usage &amp; Team Conversation History</p>
+
     <div id="error" class="error hidden"></div>
 
     <!-- Setup Section -->
@@ -119,80 +116,100 @@
         <div class="upload-grid">
           <label class="upload-zone" id="user-zone" ondrop="handleDrop(event, 'user')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
             <div class="label">👥 Users JSON</div>
-            <span id="user-status">Click or drag & drop</span>
+            <span id="user-status">Click or drag &amp; drop</span>
             <input type="file" id="user-input" accept=".json">
           </label>
           <label class="upload-zone" id="conv-zone" ondrop="handleDrop(event, 'conv')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
             <div class="label">💬 Conversations JSON</div>
-            <span id="conv-status">Click or drag & drop (can add more later)</span>
+            <span id="conv-status">Click or drag &amp; drop (can add more later)</span>
             <input type="file" id="conv-input" accept=".json" multiple>
           </label>
         </div>
-        
         <div id="load-btn-container" class="hidden">
-          <button onclick="processData()" style="width:100%;">Load & View</button>
+          <button onclick="processData()" style="width:100%;">Load &amp; View</button>
         </div>
       </div>
     </div>
 
-    <!-- Main Viewer Section -->
+    <!-- Viewer Section -->
     <div id="viewer-section" class="hidden">
-      <div class="main-layout">
-        <!-- User Sidebar -->
-        <div class="sidebar">
-          <h3>Team Members</h3>
-          <input type="text" id="user-search" placeholder="Search users...">
-          <div class="user-list" id="user-list"></div>
-          
-          <div class="file-list">
-            <h4>Loaded Files</h4>
-            <div id="file-list-items"></div>
-          </div>
-          
-          <div class="sidebar-actions">
-            <label class="secondary" style="background:#374151;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:500;text-align:center;font-size:0.8rem;">
-              + Add More Conversations
-              <input type="file" id="add-conv-input" accept=".json" multiple style="display:none;">
-            </label>
-            <button class="secondary" onclick="startOver()">Start Over</button>
-          </div>
+
+      <!-- Team Overview -->
+      <div id="team-overview">
+        <div class="top-actions">
+          <label style="background:#374151;color:white;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.82rem;">
+            + Add More Conversations
+            <input type="file" id="add-conv-input" accept=".json" multiple style="display:none;">
+          </label>
+          <button class="secondary" onclick="startOver()">Start Over</button>
         </div>
-        
-        <!-- Conversations Panel -->
-        <div class="conv-panel">
-          <div id="no-selection" class="no-selection">
-            ← Select a user to view their conversations
+
+        <!-- Team Stats -->
+        <div class="stat-grid" id="team-stats"></div>
+
+        <!-- Team Activity Over Time -->
+        <div class="card">
+          <div class="section-header">
+            <h3>Team Activity</h3>
+            <div class="period-tabs" id="team-period-tabs">
+              <button class="period-btn active" onclick="switchTeamPeriod('daily')">Daily</button>
+              <button class="period-btn" onclick="switchTeamPeriod('weekly')">Weekly</button>
+              <button class="period-btn" onclick="switchTeamPeriod('monthly')">Monthly</button>
+            </div>
           </div>
-          <div id="conv-container" class="hidden">
-            <!-- Tabs -->
-            <div class="tabs">
-              <button class="tab-btn active" onclick="switchTab('conversations')">💬 Conversations</button>
-              <button class="tab-btn" onclick="switchTab('usage')">📊 Usage Summary</button>
-            </div>
+          <div id="team-activity-table"></div>
+        </div>
 
-            <!-- Conversations Tab -->
-            <div id="tab-conversations">
-              <div class="conv-header-bar">
-                <input type="text" id="search-input" placeholder="Search conversations...">
-                <button class="secondary" onclick="exportCSV()">Export CSV</button>
-                <span class="info" id="conv-count"></span>
-              </div>
-              <div id="conversations"></div>
-            </div>
+        <!-- User Leaderboard -->
+        <div class="card">
+          <div class="section-header">
+            <h3>Users — click to drill down</h3>
+            <input type="text" id="user-search" placeholder="Search users..." style="width:200px;">
+          </div>
+          <div id="user-leaderboard"></div>
+        </div>
+      </div>
 
-            <!-- Usage Summary Tab -->
-            <div id="tab-usage" class="hidden">
-              <div class="usage-stat-grid" id="usage-stats"></div>
-              <div class="usage-period-tabs">
-                <button class="period-btn active" onclick="switchPeriod('daily')">Daily</button>
-                <button class="period-btn" onclick="switchPeriod('weekly')">Weekly</button>
-                <button class="period-btn" onclick="switchPeriod('monthly')">Monthly</button>
+      <!-- User Detail -->
+      <div id="user-detail" class="hidden">
+        <button class="back-btn" onclick="backToOverview()">← Team Overview</button>
+        <div class="user-detail-header">
+          <h2 id="user-detail-name"></h2>
+          <span class="meta" id="user-detail-meta"></span>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchTab('conversations')">💬 Conversations</button>
+          <button class="tab-btn" onclick="switchTab('usage')">📊 Usage Summary</button>
+        </div>
+
+        <!-- Conversations Tab -->
+        <div id="tab-conversations">
+          <div class="conv-header-bar">
+            <input type="text" id="search-input" placeholder="Search conversations...">
+            <button class="secondary" onclick="exportCSV()">Export CSV</button>
+            <span class="info" id="conv-count"></span>
+          </div>
+          <div id="conversations"></div>
+        </div>
+
+        <!-- Usage Summary Tab -->
+        <div id="tab-usage" class="hidden">
+          <div class="stat-grid" id="user-stats"></div>
+          <div class="card">
+            <div class="section-header">
+              <h3>Activity over time</h3>
+              <div class="period-tabs" id="user-period-tabs">
+                <button class="period-btn active" onclick="switchUserPeriod('daily')">Daily</button>
+                <button class="period-btn" onclick="switchUserPeriod('weekly')">Weekly</button>
+                <button class="period-btn" onclick="switchUserPeriod('monthly')">Monthly</button>
               </div>
-              <div id="usage-table-container"></div>
             </div>
+            <div id="user-activity-table"></div>
           </div>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -206,41 +223,30 @@
     let convUuidField = '';
     let userUuidField = '';
     let usernameField = '';
+    let activeTab = 'conversations';
+    let teamPeriod = 'daily';
+    let userPeriod = 'daily';
 
     // File upload handlers
-    document.getElementById('user-input').addEventListener('change', (e) => loadUserFile(e.target.files[0]));
-    document.getElementById('conv-input').addEventListener('change', (e) => loadConvFiles(Array.from(e.target.files)));
-    document.getElementById('add-conv-input').addEventListener('change', (e) => addMoreConvFiles(e));
+    document.getElementById('user-input').addEventListener('change', e => loadUserFile(e.target.files[0]));
+    document.getElementById('conv-input').addEventListener('change', e => loadConvFiles(Array.from(e.target.files)));
+    document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
 
-    function handleDragOver(e) {
-      e.preventDefault();
-      e.currentTarget.classList.add('dragover');
-    }
-
-    function handleDragLeave(e) {
-      e.currentTarget.classList.remove('dragover');
-    }
-
+    function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+    function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
     function handleDrop(e, type) {
       e.preventDefault();
       e.currentTarget.classList.remove('dragover');
       const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));
       if (!files.length) return;
-      
-      if (type === 'user') {
-        loadUserFile(files[0]);
-      } else {
-        loadConvFiles(files);
-      }
+      type === 'user' ? loadUserFile(files[0]) : loadConvFiles(files);
     }
 
     function loadUserFile(file) {
       if (!file) return;
-      
       document.getElementById('user-status').textContent = 'Loading...';
-      
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = ev => {
         try {
           const json = JSON.parse(ev.target.result);
           usersData = Array.isArray(json) ? json : [json];
@@ -259,24 +265,22 @@
 
     function loadConvFiles(files) {
       if (!files.length) return;
-      
       document.getElementById('conv-status').textContent = 'Loading...';
       conversationsData = [];
       loadedFiles = [];
-      
       let loaded = 0;
       files.forEach(file => {
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = ev => {
           try {
             const json = JSON.parse(ev.target.result);
             const data = Array.isArray(json) ? json : [json];
             conversationsData = conversationsData.concat(data);
             loadedFiles.push({ name: file.name, count: data.length });
             loaded++;
-            
             if (loaded === files.length) {
-              document.getElementById('conv-status').textContent = `✓ ${conversationsData.length.toLocaleString()} conversations (${files.length} file${files.length > 1 ? 's' : ''})`;
+              document.getElementById('conv-status').textContent =
+                `✓ ${conversationsData.length.toLocaleString()} conversations (${files.length} file${files.length > 1 ? 's' : ''})`;
               document.getElementById('conv-zone').classList.add('loaded');
               autoDetectConvField();
               hideError();
@@ -290,40 +294,30 @@
       });
     }
 
-    function addMoreConvFiles(e) {
+    document.getElementById('add-conv-input').addEventListener('change', e => {
       const files = Array.from(e.target.files);
       if (!files.length) return;
-      
       let loaded = 0;
-      let newCount = 0;
-      
       files.forEach(file => {
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = ev => {
           try {
             const json = JSON.parse(ev.target.result);
             const data = Array.isArray(json) ? json : [json];
             conversationsData = conversationsData.concat(data);
             loadedFiles.push({ name: file.name, count: data.length });
-            newCount += data.length;
             loaded++;
-            
             if (loaded === files.length) {
               reprocessConversations();
-              renderFileList();
-              renderUserList(document.getElementById('user-search').value);
-              if (selectedUserId) renderConversations();
+              renderTeamOverview();
               hideError();
             }
-          } catch (err) {
-            showError(`Error parsing ${file.name}: ${err.message}`);
-          }
+          } catch (err) { showError(`Error parsing ${file.name}: ${err.message}`); }
         };
         reader.readAsText(file);
       });
-      
       e.target.value = '';
-    }
+    });
 
     function checkBothLoaded() {
       if (usersData && conversationsData.length) {
@@ -334,31 +328,16 @@
     function autoDetectUserFields() {
       if (!usersData?.[0]) return;
       const keys = Object.keys(usersData[0]);
-      
-      const uuidGuesses = ['uuid', 'id', 'user_id', 'userId'];
-      const nameGuesses = ['full_name', 'username', 'name', 'displayName', 'display_name', 'email'];
-      
-      for (const g of uuidGuesses) {
-        if (keys.includes(g)) { userUuidField = g; break; }
-      }
-      for (const g of nameGuesses) {
-        if (keys.includes(g)) { usernameField = g; break; }
-      }
+      for (const g of ['uuid', 'id', 'user_id', 'userId']) { if (keys.includes(g)) { userUuidField = g; break; } }
+      for (const g of ['full_name', 'username', 'name', 'displayName', 'display_name', 'email']) { if (keys.includes(g)) { usernameField = g; break; } }
     }
 
     function autoDetectConvField() {
       if (!conversationsData?.[0]) return;
       const conv = conversationsData[0];
-      
-      if (conv?.account?.uuid) {
-        convUuidField = 'account.uuid';
-      } else {
-        const keys = Object.keys(conv);
-        const guesses = ['user_id', 'userId', 'user_uuid', 'account_uuid', 'uuid'];
-        for (const g of guesses) {
-          if (keys.includes(g)) { convUuidField = g; break; }
-        }
-      }
+      if (conv?.account?.uuid) { convUuidField = 'account.uuid'; return; }
+      const keys = Object.keys(conv);
+      for (const g of ['user_id', 'userId', 'user_uuid', 'account_uuid', 'uuid']) { if (keys.includes(g)) { convUuidField = g; break; } }
     }
 
     function getNestedValue(obj, path) {
@@ -370,31 +349,20 @@
         showError('Could not auto-detect field mappings. Please check your files.');
         return;
       }
-      
-      // Build user map
       userMap = {};
       usersData.forEach(u => {
         const id = u[userUuidField];
-        if (id) {
-          userMap[id] = { uuid: id, name: u[usernameField] || 'Unknown', count: 0 };
-        }
+        if (id) userMap[id] = { uuid: id, name: u[usernameField] || 'Unknown', count: 0 };
       });
-      
       reprocessConversations();
-      
-      // Show viewer
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('viewer-section').classList.remove('hidden');
-      renderUserList();
-      renderFileList();
+      renderTeamOverview();
       hideError();
     }
 
     function reprocessConversations() {
-      // Reset counts
       Object.values(userMap).forEach(u => u.count = 0);
-      
-      // Group conversations by user
       convByUser = {};
       conversationsData.forEach(c => {
         const userId = getNestedValue(c, convUuidField);
@@ -402,78 +370,173 @@
         convByUser[userId].push(c);
         if (userMap[userId]) userMap[userId].count++;
       });
-      
-      // Sort conversations by date
       Object.keys(convByUser).forEach(id => {
         convByUser[id].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       });
     }
 
-    function renderFileList() {
-      const container = document.getElementById('file-list-items');
-      container.innerHTML = loadedFiles.map(f => `
-        <div class="file-item">
-          <span>${escapeHtml(f.name)}</span>
-          <span class="count">${f.count}</span>
+    // ─── Team Overview ───────────────────────────────────────────────────────
+
+    function renderTeamOverview() {
+      const allConvs = conversationsData;
+      const totalMsgs = allConvs.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+      const activeUsers = Object.values(userMap).filter(u => u.count > 0).length;
+      const dates = allConvs.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
+      const earliest = dates.length ? new Date(Math.min(...dates)) : null;
+      const latest = dates.length ? new Date(Math.max(...dates)) : null;
+      const dateRange = earliest && latest
+        ? `${earliest.toLocaleDateString()} – ${latest.toLocaleDateString()}` : '—';
+
+      document.getElementById('team-stats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-label">Active Users</div>
+          <div class="stat-value">${activeUsers}</div>
+          <div class="stat-sub">of ${Object.keys(userMap).length} total</div>
         </div>
-      `).join('');
+        <div class="stat-card">
+          <div class="stat-label">Total Conversations</div>
+          <div class="stat-value">${allConvs.length.toLocaleString()}</div>
+          <div class="stat-sub">${dateRange}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Messages</div>
+          <div class="stat-value">${totalMsgs.toLocaleString()}</div>
+          <div class="stat-sub">avg ${allConvs.length ? (totalMsgs / allConvs.length).toFixed(1) : 0} per conversation</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Loaded Files</div>
+          <div class="stat-value">${loadedFiles.length}</div>
+          <div class="stat-sub">${loadedFiles.map(f => f.name).join(', ').substring(0, 40) || '—'}</div>
+        </div>
+      `;
+
+      renderTeamActivity();
+      renderUserLeaderboard();
     }
 
-    function renderUserList(filter = '') {
-      const list = document.getElementById('user-list');
+    function switchTeamPeriod(period) {
+      teamPeriod = period;
+      document.querySelectorAll('#team-period-tabs .period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === period);
+      });
+      renderTeamActivity();
+    }
+
+    function renderTeamActivity() {
+      const buckets = buildBuckets(conversationsData, teamPeriod);
+      const rows = Object.values(buckets).sort((a, b) => b.key.localeCompare(a.key)).slice(0, 30);
+      const maxCount = Math.max(...rows.map(r => r.count), 1);
+
+      document.getElementById('team-activity-table').innerHTML = rows.length ? `
+        <table class="data-table">
+          <thead><tr>
+            <th>${teamPeriod.charAt(0).toUpperCase() + teamPeriod.slice(1)}</th>
+            <th>Conversations</th>
+            <th>Messages</th>
+            <th style="width:180px;">Activity</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr class="non-clickable">
+                <td>${escapeHtml(r.label)}</td>
+                <td>${r.count}</td>
+                <td>${r.msgs}</td>
+                <td><div class="bar-wrap"><div class="bar-fill blue" style="width:${Math.round((r.count/maxCount)*100)}%"></div></div></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '<div class="no-data">No activity data</div>';
+    }
+
+    function renderUserLeaderboard(filter = '') {
       const users = Object.values(userMap)
-        .filter(u => u.name.toLowerCase().includes((filter || '').toLowerCase()))
+        .filter(u => u.name.toLowerCase().includes(filter.toLowerCase()))
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-      
-      list.innerHTML = users.map(u => `
-        <div class="user-item ${selectedUserId === u.uuid ? 'selected' : ''}" onclick="selectUser('${u.uuid}')">
-          <span class="name">${escapeHtml(u.name)}</span>
-          <span class="count">${u.count}</span>
-        </div>
-      `).join('');
-      
-      if (users.length === 0) {
-        list.innerHTML = '<div style="padding:16px;text-align:center;color:#6b7280;font-size:0.85rem;">No users found</div>';
-      }
+      const maxCount = Math.max(...users.map(u => u.count), 1);
+
+      document.getElementById('user-leaderboard').innerHTML = users.length ? `
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:32px;">#</th>
+            <th>User</th>
+            <th>Conversations</th>
+            <th>Messages</th>
+            <th style="width:180px;">Activity</th>
+          </tr></thead>
+          <tbody>
+            ${users.map((u, i) => {
+              const msgs = (convByUser[u.uuid] || []).reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+              return `
+                <tr onclick="selectUser('${u.uuid}')">
+                  <td class="rank">${i + 1}</td>
+                  <td class="user-name-cell">${escapeHtml(u.name)}</td>
+                  <td>${u.count}</td>
+                  <td>${msgs.toLocaleString()}</td>
+                  <td><div class="bar-wrap"><div class="bar-fill teal" style="width:${Math.round((u.count/maxCount)*100)}%"></div></div></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      ` : '<div class="no-data">No users found</div>';
     }
 
-    document.getElementById('user-search').addEventListener('input', (e) => {
-      renderUserList(e.target.value);
-    });
+    // ─── User Detail ─────────────────────────────────────────────────────────
 
     function selectUser(uuid) {
       selectedUserId = uuid;
-      renderUserList(document.getElementById('user-search').value);
-      
-      document.getElementById('no-selection').classList.add('hidden');
-      document.getElementById('conv-container').classList.remove('hidden');
-      document.getElementById('search-input').value = '';
-      
-      renderConversations();
-      if (activeTab === 'usage') renderUsage();
+      const user = userMap[uuid];
+      const convs = convByUser[uuid] || [];
+      const msgs = convs.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+
+      document.getElementById('team-overview').classList.add('hidden');
+      document.getElementById('user-detail').classList.remove('hidden');
+      document.getElementById('user-detail-name').textContent = user?.name || 'Unknown';
+      document.getElementById('user-detail-meta').textContent =
+        `${convs.length.toLocaleString()} conversations · ${msgs.toLocaleString()} messages`;
+
+      // Reset to conversations tab
+      switchTab('conversations');
+    }
+
+    function backToOverview() {
+      selectedUserId = null;
+      document.getElementById('user-detail').classList.add('hidden');
+      document.getElementById('team-overview').classList.remove('hidden');
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (i === 0 && tab === 'conversations') || (i === 1 && tab === 'usage'));
+      });
+      document.getElementById('tab-conversations').classList.toggle('hidden', tab !== 'conversations');
+      document.getElementById('tab-usage').classList.toggle('hidden', tab !== 'usage');
+      if (tab === 'conversations') renderConversations();
+      if (tab === 'usage') renderUserUsage();
     }
 
     function renderConversations() {
       const search = document.getElementById('search-input').value.toLowerCase();
       const userConvs = convByUser[selectedUserId] || [];
       const userName = userMap[selectedUserId]?.name || 'Unknown';
-      
+
       const filtered = userConvs.filter(c => {
         if (!search) return true;
         return c.name?.toLowerCase().includes(search) ||
           c.chat_messages?.some(m => m.text?.toLowerCase().includes(search));
       });
-      
-      document.getElementById('conv-count').textContent = 
-        `${filtered.length} conversation${filtered.length !== 1 ? 's' : ''} for ${userName}`;
-      
+
+      document.getElementById('conv-count').textContent =
+        `${filtered.length} conversation${filtered.length !== 1 ? 's' : ''}`;
+
       const container = document.getElementById('conversations');
-      
-      if (filtered.length === 0) {
-        container.innerHTML = '<div class="no-selection">No conversations found</div>';
+      if (!filtered.length) {
+        container.innerHTML = '<div class="no-data">No conversations found</div>';
         return;
       }
-      
+
       container.innerHTML = filtered.slice(0, 100).map((conv, i) => `
         <div class="conversation">
           <div class="conv-header" onclick="toggleConv(this, ${i})">
@@ -488,13 +551,13 @@
             ${(conv.chat_messages || []).map(m => `
               <div class="message ${m.sender}">
                 <div class="sender">${m.sender === 'human' ? escapeHtml(userName) : 'Claude'}</div>
-                <div class="text">${escapeHtml((m.text || '').substring(0, 3000))}${(m.text?.length || 0) > 3000 ? '...' : ''}</div>
+                <div class="text">${escapeHtml((m.text || '').substring(0, 3000))}${(m.text?.length || 0) > 3000 ? '…' : ''}</div>
               </div>
             `).join('')}
           </div>
         </div>
       `).join('');
-      
+
       if (filtered.length > 100) {
         container.innerHTML += '<p style="text-align:center;padding:20px;color:#6b7280;font-size:0.85rem;">Showing first 100. Use search to find specific conversations.</p>';
       }
@@ -502,107 +565,100 @@
 
     document.getElementById('search-input').addEventListener('input', renderConversations);
 
-    // Tab switching
-    let activeTab = 'conversations';
-    let activePeriod = 'daily';
-
-    function switchTab(tab) {
-      activeTab = tab;
-      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-        btn.classList.toggle('active', (i === 0 && tab === 'conversations') || (i === 1 && tab === 'usage'));
-      });
-      document.getElementById('tab-conversations').classList.toggle('hidden', tab !== 'conversations');
-      document.getElementById('tab-usage').classList.toggle('hidden', tab !== 'usage');
-      if (tab === 'usage') renderUsage();
+    function toggleConv(header, index) {
+      header.classList.toggle('expanded');
+      document.getElementById('msgs-' + index).classList.toggle('hidden');
     }
 
-    function switchPeriod(period) {
-      activePeriod = period;
-      document.querySelectorAll('.period-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent.toLowerCase() === period);
-      });
-      renderUsage();
-    }
-
-    function renderUsage() {
+    function renderUserUsage() {
       const userConvs = convByUser[selectedUserId] || [];
-      const userName = userMap[selectedUserId]?.name || 'Unknown';
 
       if (!userConvs.length) {
-        document.getElementById('usage-table-container').innerHTML =
-          '<div class="no-selection">No conversations to summarise</div>';
+        document.getElementById('user-activity-table').innerHTML = '<div class="no-data">No conversations to summarise</div>';
         return;
       }
 
-      // Stats
-      const totalMsgs = userConvs.reduce((sum, c) => sum + (c.chat_messages?.length || 0), 0);
-      const humanMsgs = userConvs.reduce((sum, c) =>
-        sum + (c.chat_messages?.filter(m => m.sender === 'human').length || 0), 0);
+      const totalMsgs = userConvs.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+      const humanMsgs = userConvs.reduce((s, c) => s + (c.chat_messages?.filter(m => m.sender === 'human').length || 0), 0);
       const dates = userConvs.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
       const earliest = dates.length ? new Date(Math.min(...dates)) : null;
       const latest = dates.length ? new Date(Math.max(...dates)) : null;
-      const spanDays = earliest && latest
-        ? Math.max(1, Math.round((latest - earliest) / 86400000) + 1) : 1;
-      const avgPerDay = (userConvs.length / spanDays).toFixed(1);
+      const spanDays = earliest && latest ? Math.max(1, Math.round((latest - earliest) / 86400000) + 1) : 1;
 
-      document.getElementById('usage-stats').innerHTML = `
-        <div class="usage-stat">
-          <div class="stat-label">Total Conversations</div>
+      document.getElementById('user-stats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-label">Conversations</div>
           <div class="stat-value">${userConvs.length.toLocaleString()}</div>
           <div class="stat-sub">${humanMsgs.toLocaleString()} user messages</div>
         </div>
-        <div class="usage-stat">
+        <div class="stat-card">
           <div class="stat-label">Total Messages</div>
           <div class="stat-value">${totalMsgs.toLocaleString()}</div>
           <div class="stat-sub">avg ${(totalMsgs / userConvs.length).toFixed(1)} per conversation</div>
         </div>
-        <div class="usage-stat">
-          <div class="stat-label">Avg per Day</div>
-          <div class="stat-value">${avgPerDay}</div>
-          <div class="stat-sub">across ${spanDays} day${spanDays !== 1 ? 's' : ''} of activity</div>
+        <div class="stat-card">
+          <div class="stat-label">Avg / Day</div>
+          <div class="stat-value">${(userConvs.length / spanDays).toFixed(1)}</div>
+          <div class="stat-sub">over ${spanDays} day${spanDays !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Date Range</div>
+          <div class="stat-value" style="font-size:1rem;">${earliest ? earliest.toLocaleDateString() : '—'}</div>
+          <div class="stat-sub">to ${latest ? latest.toLocaleDateString() : '—'}</div>
         </div>
       `;
 
-      // Build period buckets
-      const buckets = {};
-      userConvs.forEach(c => {
-        const d = new Date(c.created_at);
-        if (isNaN(d)) return;
-        const key = getPeriodKey(d, activePeriod);
-        if (!buckets[key]) buckets[key] = { key, label: getPeriodLabel(d, activePeriod), count: 0, msgs: 0 };
-        buckets[key].count++;
-        buckets[key].msgs += c.chat_messages?.length || 0;
-      });
+      renderUserActivity(userConvs);
+    }
 
+    function switchUserPeriod(period) {
+      userPeriod = period;
+      document.querySelectorAll('#user-period-tabs .period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === period);
+      });
+      renderUserActivity(convByUser[selectedUserId] || []);
+    }
+
+    function renderUserActivity(userConvs) {
+      const buckets = buildBuckets(userConvs, userPeriod);
       const rows = Object.values(buckets).sort((a, b) => b.key.localeCompare(a.key));
       const maxCount = Math.max(...rows.map(r => r.count), 1);
 
-      document.getElementById('usage-table-container').innerHTML = `
-        <table class="usage-table">
-          <thead>
-            <tr>
-              <th>${activePeriod.charAt(0).toUpperCase() + activePeriod.slice(1)}</th>
-              <th>Conversations</th>
-              <th>Messages</th>
-              <th class="bar-cell">Activity</th>
-            </tr>
-          </thead>
+      document.getElementById('user-activity-table').innerHTML = rows.length ? `
+        <table class="data-table">
+          <thead><tr>
+            <th>${userPeriod.charAt(0).toUpperCase() + userPeriod.slice(1)}</th>
+            <th>Conversations</th>
+            <th>Messages</th>
+            <th style="width:180px;">Activity</th>
+          </tr></thead>
           <tbody>
             ${rows.map(r => `
-              <tr>
+              <tr class="non-clickable">
                 <td>${escapeHtml(r.label)}</td>
                 <td>${r.count}</td>
                 <td>${r.msgs}</td>
-                <td class="bar-cell">
-                  <div class="bar-wrap">
-                    <div class="bar-fill" style="width:${Math.round((r.count / maxCount) * 100)}%"></div>
-                  </div>
-                </td>
+                <td><div class="bar-wrap"><div class="bar-fill blue" style="width:${Math.round((r.count/maxCount)*100)}%"></div></div></td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-      `;
+      ` : '<div class="no-data">No activity data</div>';
+    }
+
+    // ─── Shared helpers ───────────────────────────────────────────────────────
+
+    function buildBuckets(convs, period) {
+      const buckets = {};
+      convs.forEach(c => {
+        const d = new Date(c.created_at);
+        if (isNaN(d)) return;
+        const key = getPeriodKey(d, period);
+        if (!buckets[key]) buckets[key] = { key, label: getPeriodLabel(new Date(c.created_at), period), count: 0, msgs: 0 };
+        buckets[key].count++;
+        buckets[key].msgs += c.chat_messages?.length || 0;
+      });
+      return buckets;
     }
 
     function getPeriodKey(date, period) {
@@ -621,18 +677,12 @@
     function getPeriodLabel(date, period) {
       if (period === 'daily') return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       if (period === 'weekly') {
-        // Start of week (Monday)
         const day = date.getDay();
         const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(date.setDate(diff));
+        const monday = new Date(new Date(date).setDate(diff));
         return 'Week of ' + monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       }
       return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-    }
-
-    function toggleConv(header, index) {
-      header.classList.toggle('expanded');
-      document.getElementById('msgs-' + index).classList.toggle('hidden');
     }
 
     function formatDate(dateStr) {
@@ -643,13 +693,11 @@
     function exportCSV() {
       const userConvs = convByUser[selectedUserId] || [];
       const userName = userMap[selectedUserId]?.name || 'Unknown';
-      
       let csv = 'Conversation Name,Date,Message Count,First Message\n';
       userConvs.forEach(c => {
         const firstMsg = c.chat_messages?.[0]?.text?.substring(0, 100).replace(/[\n\r,]/g, ' ') || '';
         csv += `"${(c.name || '').replace(/"/g, '""')}","${formatDate(c.created_at)}",${c.chat_messages?.length || 0},"${firstMsg.replace(/"/g, '""')}"\n`;
       });
-      
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -665,7 +713,6 @@
       userMap = {};
       convByUser = {};
       selectedUserId = null;
-      
       document.getElementById('user-zone').classList.remove('loaded');
       document.getElementById('conv-zone').classList.remove('loaded');
       document.getElementById('user-status').textContent = 'Click or drag & drop';
@@ -673,8 +720,9 @@
       document.getElementById('load-btn-container').classList.add('hidden');
       document.getElementById('user-input').value = '';
       document.getElementById('conv-input').value = '';
-      
       document.getElementById('viewer-section').classList.add('hidden');
+      document.getElementById('user-detail').classList.add('hidden');
+      document.getElementById('team-overview').classList.remove('hidden');
       document.getElementById('setup-section').classList.remove('hidden');
     }
 
@@ -690,9 +738,7 @@
       el.classList.remove('hidden');
     }
 
-    function hideError() {
-      document.getElementById('error').classList.add('hidden');
-    }
+    function hideError() { document.getElementById('error').classList.add('hidden'); }
   </script>
 </body>
 </html>
