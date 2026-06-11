@@ -32,6 +32,12 @@
     .folder-sub { font-size: 0.8rem; color: #6b7280; max-width: 380px; }
     .clickable-card { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
     .clickable-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(59,130,246,0.25); border-color: #60a5fa; }
+    #cost-view label.cost-label { display: block; font-size: 0.75rem; color: #9ca3af; margin-bottom: 4px; }
+    #cost-view input, #cost-view select { width: 100%; background: #111827; color: #e5e7eb; border: 1px solid #374151; border-radius: 6px; padding: 7px 10px; font-size: 0.85rem; }
+    .cost-badge { font-size: 0.72rem; padding: 2px 9px; border-radius: 10px; }
+    .cost-badge.idle { background: rgba(239,68,68,0.15); color: #fca5a5; }
+    .cost-badge.low { background: rgba(234,179,8,0.15); color: #fde047; }
+    .cost-badge.good { background: rgba(34,197,94,0.15); color: #4ade80; }
     .detected-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px; font-size: 0.85rem; }
     .detected-row.found { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
     .detected-row.missing { opacity: 0.5; }
@@ -206,15 +212,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <!-- Viewer Section -->
     <div id="viewer-section" class="hidden">
 
-      <!-- Team Overview -->
-      <div id="team-overview">
-        <div class="top-actions">
+      <!-- Top view nav (shared across team-level views) -->
+      <div class="top-actions" id="viewer-nav" style="justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="tab-btn active" id="view-tab-overview" onclick="switchView('overview')">📊 Team Overview</button>
+          <button class="tab-btn" id="view-tab-cost" onclick="switchView('cost')">💰 Cost &amp; Value</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <label style="background:#374151;color:white;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.82rem;">
             + Add More Conversations
             <input type="file" id="add-conv-input" accept=".json" multiple style="display:none;">
           </label>
           <button class="secondary" onclick="startOver()">Start Over</button>
         </div>
+      </div>
+
+      <!-- Team Overview -->
+      <div id="team-overview">
 
         <!-- Team Stats -->
         <div class="stat-grid" id="team-stats"></div>
@@ -259,6 +273,49 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="design-table"></div>
       </div>
 
+      </div>
+
+      <!-- Cost & Value -->
+      <div id="cost-view" class="hidden">
+        <div class="card">
+          <div class="section-header"><h3>License &amp; cost inputs</h3></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;align-items:end;">
+            <div>
+              <label class="cost-label" for="cost-preset">Plan preset</label>
+              <select id="cost-preset" onchange="applyCostPreset()">
+                <option value="team-annual">Claude Team — annual</option>
+                <option value="team-monthly">Claude Team — monthly</option>
+                <option value="enterprise">Enterprise / custom</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div>
+              <label class="cost-label" for="cost-perseat">Per seat ($ / month)</label>
+              <input type="number" id="cost-perseat" min="0" step="1" oninput="markCustom();renderCostView()">
+            </div>
+            <div>
+              <label class="cost-label" for="cost-seats">Licensed seats</label>
+              <input type="number" id="cost-seats" min="0" step="1" oninput="renderCostView()">
+            </div>
+            <div>
+              <label class="cost-label" for="cost-threshold">Low-usage threshold (convs)</label>
+              <input type="number" id="cost-threshold" min="0" step="1" oninput="renderCostView()">
+            </div>
+          </div>
+          <p style="font-size:0.75rem;color:#6b7280;margin-top:10px;">Preset prices are editable defaults — confirm your actual rate with your Anthropic plan. All figures are computed locally and reflect the export's date range.</p>
+        </div>
+
+        <div class="stat-grid" id="cost-stats"></div>
+
+        <div class="card" id="cost-reclaim"></div>
+
+        <div class="card">
+          <div class="section-header">
+            <h3>Per-user value</h3>
+            <span id="cost-table-note" style="font-size:0.8rem;color:#6b7280;"></span>
+          </div>
+          <div id="cost-table"></div>
+        </div>
       </div>
 
       <!-- User Detail -->
@@ -331,6 +388,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let activeTab = 'conversations';
     let teamPeriod = 'daily';
     let userPeriod = 'daily';
+    let viewMode = 'overview';
 
     // File upload handlers
     document.getElementById('user-input').addEventListener('change', e => loadUserFile(e.target.files[0]));
@@ -422,6 +480,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             if (loaded === files.length) {
               reprocessConversations();
               renderTeamOverview();
+              if (viewMode === 'cost') renderCostView();
               hideError();
             }
           } catch (err) { showError(`Error parsing ${file.name}: ${err.message}`); }
@@ -774,6 +833,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('viewer-section').classList.remove('hidden');
       renderTeamOverview();
+      initCost();
+      switchView('overview');
       hideError();
     }
 
@@ -915,6 +976,141 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (el && el.offsetParent !== null) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ─── Cost & Value ──────────────────────────────────────────────────────────
+    const COST_PRESETS = { 'team-annual': 25, 'team-monthly': 30 };
+
+    function switchView(mode) {
+      viewMode = mode;
+      document.getElementById('user-detail').classList.add('hidden');
+      document.getElementById('viewer-nav').classList.remove('hidden');
+      const overview = mode === 'overview';
+      document.getElementById('team-overview').classList.toggle('hidden', !overview);
+      document.getElementById('cost-view').classList.toggle('hidden', overview);
+      document.getElementById('view-tab-overview').classList.toggle('active', overview);
+      document.getElementById('view-tab-cost').classList.toggle('active', !overview);
+      if (mode === 'cost') renderCostView();
+    }
+
+    function initCost() {
+      document.getElementById('cost-preset').value = 'team-annual';
+      document.getElementById('cost-perseat').value = COST_PRESETS['team-annual'];
+      document.getElementById('cost-seats').value = Object.keys(userMap).length;
+      document.getElementById('cost-threshold').value = 5;
+    }
+
+    function applyCostPreset() {
+      const p = document.getElementById('cost-preset').value;
+      if (p in COST_PRESETS) document.getElementById('cost-perseat').value = COST_PRESETS[p];
+      renderCostView();
+    }
+
+    // Editing the per-seat field switches the preset to "Custom" so the label matches.
+    function markCustom() {
+      const sel = document.getElementById('cost-preset');
+      const val = parseFloat(document.getElementById('cost-perseat').value);
+      if (!(sel.value in COST_PRESETS) || COST_PRESETS[sel.value] !== val) sel.value = 'custom';
+    }
+
+    function fmtUSD(n, dec = 0) {
+      return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
+    function renderCostView() {
+      const perSeat = parseFloat(document.getElementById('cost-perseat').value) || 0;
+      const seats = parseInt(document.getElementById('cost-seats').value) || 0;
+      const threshold = parseInt(document.getElementById('cost-threshold').value) || 0;
+
+      const users = Object.values(userMap);
+      const activeUsers = users.filter(u => u.count > 0).length;
+      const idleUsers = users.filter(u => u.count === 0).length;
+      const idleSeats = Math.max(0, seats - activeUsers);
+      const totalConvs = conversationsData.length;
+      const totalMsgs = conversationsData.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+
+      const dates = conversationsData.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
+      const spanDays = dates.length
+        ? Math.max(1, (Math.max(...dates) - Math.min(...dates)) / 86400000 + 1) : 30;
+      const periodMonths = Math.max(spanDays / 30.44, 0.1);
+
+      const monthlySpend = perSeat * seats;
+      const periodSpend = monthlySpend * periodMonths;
+      const utilization = seats ? (activeUsers / seats * 100) : 0;
+      const idleSpend = perSeat * idleSeats;
+      const costPerActive = activeUsers ? monthlySpend / activeUsers : 0;
+      const costPerConv = totalConvs ? periodSpend / totalConvs : 0;
+      const costPerMsg = totalMsgs ? periodSpend / totalMsgs : 0;
+      const fine = n => n >= 1 ? fmtUSD(n, 2) : '$' + (n || 0).toFixed(4);
+
+      document.getElementById('cost-stats').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Monthly Spend</div>
+          <div class="stat-value">${fmtUSD(monthlySpend)}</div>
+          <div class="stat-sub">${seats} seats × ${fmtUSD(perSeat)}</div></div>
+        <div class="stat-card"><div class="stat-label">Annual Spend</div>
+          <div class="stat-value">${fmtUSD(monthlySpend * 12)}</div>
+          <div class="stat-sub">at current rate</div></div>
+        <div class="stat-card"><div class="stat-label">Utilization</div>
+          <div class="stat-value">${utilization.toFixed(0)}%</div>
+          <div class="stat-sub">${activeUsers} of ${seats} seats active</div></div>
+        <div class="stat-card"><div class="stat-label">Idle Spend / mo</div>
+          <div class="stat-value" style="color:${idleSpend > 0 ? '#fca5a5' : '#e5e7eb'};">${fmtUSD(idleSpend)}</div>
+          <div class="stat-sub">${idleSeats} idle seat${idleSeats !== 1 ? 's' : ''}</div></div>
+        <div class="stat-card"><div class="stat-label">Cost / Active User</div>
+          <div class="stat-value">${fmtUSD(costPerActive)}</div>
+          <div class="stat-sub">per month</div></div>
+        <div class="stat-card"><div class="stat-label">Cost / Conversation</div>
+          <div class="stat-value">${fine(costPerConv)}</div>
+          <div class="stat-sub">over ~${periodMonths.toFixed(1)} mo</div></div>
+        <div class="stat-card"><div class="stat-label">Cost / Message</div>
+          <div class="stat-value">${fine(costPerMsg)}</div>
+          <div class="stat-sub">over ~${periodMonths.toFixed(1)} mo</div></div>
+        <div class="stat-card"><div class="stat-label">Period</div>
+          <div class="stat-value">${periodMonths.toFixed(1)} mo</div>
+          <div class="stat-sub">${Math.round(spanDays)} days of data</div></div>
+      `;
+
+      const lowUsers = users.filter(u => u.count > 0 && u.count <= threshold).length;
+      const reclaimMonthly = idleSpend;
+      document.getElementById('cost-reclaim').innerHTML = `
+        <div class="section-header"><h3>Reclaim opportunity</h3></div>
+        ${idleSeats > 0
+          ? `<p style="font-size:0.95rem;">Cancelling <strong>${idleSeats}</strong> idle seat${idleSeats !== 1 ? 's' : ''} (no activity in this export) would save
+               <strong style="color:#4ade80;">${fmtUSD(reclaimMonthly)}/mo</strong> (${fmtUSD(reclaimMonthly * 12)}/yr).</p>`
+          : `<p style="font-size:0.95rem;color:#4ade80;">No idle seats — every licensed seat has activity. 👍</p>`}
+        ${lowUsers > 0
+          ? `<p style="font-size:0.85rem;color:#9ca3af;margin-top:6px;">${lowUsers} active user${lowUsers !== 1 ? 's' : ''} below ${threshold} conversation${threshold !== 1 ? 's' : ''} — review for right-sizing.</p>`
+          : ''}
+      `;
+
+      const periodSeatCost = perSeat * periodMonths;
+      const sorted = [...users].sort((a, b) => a.count - b.count || a.name.localeCompare(b.name));
+      document.getElementById('cost-table-note').textContent =
+        `${activeUsers} active · ${idleUsers} idle of ${users.length} users`;
+      document.getElementById('cost-table').innerHTML = `
+        <table class="data-table">
+          <thead><tr>
+            <th>User</th><th>Conversations</th><th>Messages</th><th>Seat $/mo</th><th>Cost / conv</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            ${sorted.map(u => {
+              const msgs = (convByUser[u.uuid] || []).reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+              const cpc = u.count ? periodSeatCost / u.count : 0;
+              const status = u.count === 0 ? 'idle' : (u.count <= threshold ? 'low' : 'good');
+              const label = status === 'idle' ? 'Idle' : status === 'low' ? 'Low' : 'Active';
+              const clickable = u.count > 0;
+              return `<tr class="${clickable ? '' : 'non-clickable'}"${clickable ? ` onclick="selectUser('${u.uuid}')"` : ''}>
+                <td style="font-weight:500;">${escapeHtml(u.name)}</td>
+                <td>${u.count.toLocaleString()}</td>
+                <td>${msgs.toLocaleString()}</td>
+                <td>${fmtUSD(perSeat)}</td>
+                <td>${u.count ? fine(cpc) : '—'}</td>
+                <td><span class="cost-badge ${status}">${label}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
     function switchTeamPeriod(period) {
       teamPeriod = period;
       document.querySelectorAll('#team-period-tabs .period-btn').forEach(btn => {
@@ -992,6 +1188,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const msgs = convs.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
 
       document.getElementById('team-overview').classList.add('hidden');
+      document.getElementById('cost-view').classList.add('hidden');
+      document.getElementById('viewer-nav').classList.add('hidden');
       document.getElementById('user-detail').classList.remove('hidden');
       document.getElementById('user-detail-name').textContent = user?.name || 'Unknown';
       document.getElementById('user-detail-meta').textContent =
@@ -1004,7 +1202,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function backToOverview() {
       selectedUserId = null;
       document.getElementById('user-detail').classList.add('hidden');
-      document.getElementById('team-overview').classList.remove('hidden');
+      // Return to whichever team-level view was active (overview or cost).
+      switchView(viewMode);
     }
 
     function switchTab(tab) {
@@ -1262,6 +1461,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('viewer-section').classList.add('hidden');
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');
+      document.getElementById('cost-view').classList.add('hidden');
+      document.getElementById('viewer-nav').classList.remove('hidden');
+      document.getElementById('view-tab-overview').classList.add('active');
+      document.getElementById('view-tab-cost').classList.remove('active');
+      viewMode = 'overview';
       document.getElementById('setup-section').classList.remove('hidden');
     }
 
