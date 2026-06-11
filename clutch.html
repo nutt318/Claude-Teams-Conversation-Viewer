@@ -30,6 +30,8 @@
     .folder-icon { font-size: 2rem; margin-bottom: 6px; }
     .folder-label { font-size: 1rem; font-weight: 600; color: #e5e7eb; margin-bottom: 4px; }
     .folder-sub { font-size: 0.8rem; color: #6b7280; max-width: 380px; }
+    .clickable-card { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
+    .clickable-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(59,130,246,0.25); border-color: #60a5fa; }
     .detected-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px; font-size: 0.85rem; }
     .detected-row.found { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
     .detected-row.missing { opacity: 0.5; }
@@ -165,6 +167,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="detected-row" id="det-projects">
             <span class="det-icon">📂</span><span class="det-label">Projects</span><span class="det-val" id="det-projects-val">—</span>
           </div>
+          <div class="detected-row" id="det-designs">
+            <span class="det-icon">🎨</span><span class="det-label">Design chats</span><span class="det-val" id="det-designs-val">—</span>
+          </div>
         </div>
 
         <!-- Or pick individually -->
@@ -183,7 +188,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <label class="upload-zone" id="proj-zone" ondrop="handleDrop(event, 'proj')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
             <div class="label">📂 Projects JSON <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
             <span id="proj-status">Click or drag &amp; drop</span>
-            <input type="file" id="proj-input" accept=".json">
+            <input type="file" id="proj-input" accept=".json" multiple>
+          </label>
+          <label class="upload-zone" id="design-zone" ondrop="handleDrop(event, 'design')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">🎨 Design chats JSON <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
+            <span id="design-status">Click or drag &amp; drop</span>
+            <input type="file" id="design-input" accept=".json" multiple>
           </label>
         </div>
 
@@ -210,7 +220,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="stat-grid" id="team-stats"></div>
 
         <!-- Team Activity Over Time -->
-        <div class="card">
+        <div class="card" id="activity-card">
           <div class="section-header">
             <h3>Team Activity</h3>
             <div class="period-tabs" id="team-period-tabs">
@@ -223,7 +233,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
 
         <!-- User Leaderboard -->
-        <div class="card">
+        <div class="card" id="leaderboard-card">
           <div class="section-header">
             <h3>Users — click to drill down</h3>
             <input type="text" id="user-search" placeholder="Search users..." style="width:200px;">
@@ -238,6 +248,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <span id="projects-count" style="font-size:0.8rem;color:#6b7280;"></span>
         </div>
         <div id="projects-table"></div>
+      </div>
+
+      <!-- Design Chats Overview -->
+      <div class="card" id="design-overview" style="display:none;">
+        <div class="section-header">
+          <h3>🎨 Design Chats</h3>
+          <span id="design-overview-count" style="font-size:0.8rem;color:#6b7280;"></span>
+        </div>
+        <div id="design-table"></div>
       </div>
 
       </div>
@@ -260,6 +279,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="tab-conversations">
           <div class="conv-header-bar">
             <input type="text" id="search-input" placeholder="Search conversations...">
+            <select id="design-filter" class="secondary" onchange="renderConversations()" style="display:none;">
+              <option value="all">All chats</option>
+              <option value="hide">Hide design 🎨</option>
+              <option value="only">Design only 🎨</option>
+            </select>
             <button class="secondary" onclick="exportCSV()">Export CSV</button>
             <span class="info" id="conv-count"></span>
           </div>
@@ -295,6 +319,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let usersData = null;
     let conversationsData = [];
     let projectsData = [];
+    let designConvs = [];   // design chats normalised into conversation shape
     let loadedFiles = [];
     let projectMap = {};
     let userMap = {};
@@ -310,7 +335,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // File upload handlers
     document.getElementById('user-input').addEventListener('change', e => loadUserFile(e.target.files[0]));
     document.getElementById('conv-input').addEventListener('change', e => loadConvFiles(Array.from(e.target.files)));
-    document.getElementById('proj-input').addEventListener('change', e => loadProjectFile(e.target.files[0]));
+    document.getElementById('proj-input').addEventListener('change', e => loadProjectFiles(Array.from(e.target.files)));
+    document.getElementById('design-input').addEventListener('change', e => loadDesignFiles(Array.from(e.target.files)));
     document.getElementById('folder-input').addEventListener('change', e => handleFolderSelect(Array.from(e.target.files)));
     document.getElementById('zip-input').addEventListener('change', e => handleZipSelect(e.target.files[0]));
     document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
@@ -323,7 +349,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));
       if (!files.length) return;
       if (type === 'user') loadUserFile(files[0]);
-      else if (type === 'proj') loadProjectFile(files[0]);
+      else if (type === 'proj') loadProjectFiles(files);
+      else if (type === 'design') loadDesignFiles(files);
       else loadConvFiles(files);
     }
 
@@ -424,12 +451,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('folder-status').textContent =
           file.name + ' (' + jsonEntries.length + ' JSON file' + (jsonEntries.length !== 1 ? 's' : '') + ')';
 
-        let usersEntry = null, convEntries = [], projEntry = null;
+        // Projects and design chats are folders of UUID-named files in newer
+        // exports (older exports used a flat projects.json). Match the folder
+        // by exact path segment so a user's export-folder name that merely
+        // contains "project"/"design" can't misclassify everything.
+        let usersEntry = null, convEntries = [], projEntries = [], designEntries = [];
         jsonEntries.forEach(entry => {
-          const name = entry.name.split('/').pop().toLowerCase();
-          if (name.includes('user')) usersEntry = entry;
+          const segs = entry.name.toLowerCase().split('/');
+          const name = segs[segs.length - 1];
+          if (segs.includes('design_chats') || name.includes('design_chat')) designEntries.push(entry);
+          else if (segs.includes('projects') || name.includes('project')) projEntries.push(entry);
+          else if (name.includes('user')) usersEntry = entry;
           else if (name.includes('conversation')) convEntries.push(entry);
-          else if (name.includes('project')) projEntry = entry;
         });
 
         const setRow = (rowId, valId, entry, optional) => {
@@ -445,7 +478,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         };
         setRow('det-users', 'det-users-val', usersEntry, false);
         setRow('det-convs', 'det-convs-val', convEntries.length ? convEntries : null, false);
-        setRow('det-projects', 'det-projects-val', projEntry, true);
+        setCountRow('det-projects', 'det-projects-val', projEntries.length, 'project');
+        setCountRow('det-designs', 'det-designs-val', designEntries.length, 'design chat');
 
         // Extract and load each file
         const readEntry = entry =>
@@ -484,15 +518,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           })
         );
 
-        if (projEntry) promises.push(readEntry(projEntry).then(({text}) => {
-          try {
-            const json = JSON.parse(text);
-            projectsData = Array.isArray(json) ? json : [json];
+        if (projEntries.length) promises.push(
+          Promise.all(projEntries.map(readEntry)).then(results => {
+            projectsData = [];
+            results.forEach(({text}) => {
+              try {
+                const j = JSON.parse(text);
+                if (Array.isArray(j)) projectsData = projectsData.concat(j);
+                else projectsData.push(j);
+              } catch(e) { /* skip unreadable project file */ }
+            });
             document.getElementById('proj-status').textContent = '\u2713 ' + projectsData.length.toLocaleString() + ' projects';
             document.getElementById('proj-zone').classList.add('loaded');
             buildProjectMap();
-          } catch(e) { showError('Error parsing projects: ' + e.message); }
-        }));
+          })
+        );
+
+        if (designEntries.length) promises.push(
+          Promise.all(designEntries.map(readEntry)).then(results => {
+            designConvs = [];
+            results.forEach(({name, text}) => {
+              try { ingestDesignChat(text); }
+              catch(e) { /* skip unreadable design chat */ }
+            });
+            const n = designConvs.length;
+            document.getElementById('design-status').textContent = '✓ ' + n.toLocaleString() + ' design chat' + (n !== 1 ? 's' : '');
+            document.getElementById('design-zone').classList.add('loaded');
+            setDesignRow(n);
+          })
+        );
 
         Promise.all(promises).then(() => {
           hideError();
@@ -508,12 +562,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
       if (!jsonFiles.length) { showError('No JSON files found in the selected folder.'); return; }
 
-      let usersFile = null, convFiles = [], projFile = null;
+      let usersFile = null, convFiles = [], projFiles = [], designFiles = [];
       jsonFiles.forEach(f => {
+        const segs = (f.webkitRelativePath || f.name).toLowerCase().split('/');
         const name = f.name.toLowerCase();
-        if (name.includes('user')) usersFile = f;
+        if (segs.includes('design_chats') || name.includes('design_chat')) designFiles.push(f);
+        else if (segs.includes('projects') || name.includes('project')) projFiles.push(f);
+        else if (name.includes('user')) usersFile = f;
         else if (name.includes('conversation')) convFiles.push(f);
-        else if (name.includes('project')) projFile = f;
       });
 
       document.getElementById('folder-zone').classList.add('loaded');
@@ -533,32 +589,70 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       setRow('det-users', 'det-users-val', usersFile, false);
       setRow('det-convs', 'det-convs-val', convFiles.length ? convFiles : null, false);
-      setRow('det-projects', 'det-projects-val', projFile, true);
+      setCountRow('det-projects', 'det-projects-val', projFiles.length, 'project');
+      setCountRow('det-designs', 'det-designs-val', designFiles.length, 'design chat');
 
       if (usersFile) loadUserFile(usersFile);
       if (convFiles.length) loadConvFiles(convFiles);
-      if (projFile) loadProjectFile(projFile);
+      if (projFiles.length) loadProjectFiles(projFiles);
+      if (designFiles.length) loadDesignFiles(designFiles);
     }
 
-    function loadProjectFile(file) {
-      if (!file) return;
-      document.getElementById('proj-status').textContent = 'Loading...';
-      const reader = new FileReader();
-      reader.onload = ev => {
-        try {
-          const json = JSON.parse(ev.target.result);
-          projectsData = Array.isArray(json) ? json : [json];
-          document.getElementById('proj-status').textContent = '\u2713 ' + projectsData.length.toLocaleString() + ' projects';
-          document.getElementById('proj-zone').classList.add('loaded');
-          buildProjectMap();
-          hideError();
-        } catch (err) {
-          showError('Error parsing projects file: ' + err.message);
-          document.getElementById('proj-status').textContent = 'Error';
-        }
-      };
-      reader.readAsText(file);
+    function loadProjectFiles(files) {
+      projectsData = [];
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const j = JSON.parse(ev.target.result);
+            if (Array.isArray(j)) projectsData = projectsData.concat(j);
+            else projectsData.push(j);
+          } catch (e) { /* skip */ }
+          if (++loaded === files.length) {
+            document.getElementById('proj-status').textContent = '✓ ' + projectsData.length.toLocaleString() + ' projects';
+            document.getElementById('proj-zone').classList.add('loaded');
+            buildProjectMap();
+            checkBothLoaded();
+          }
+        };
+        reader.readAsText(file);
+      });
     }
+
+    function loadDesignFiles(files) {
+      if (!files.length) return;
+      designConvs = [];
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try { ingestDesignChat(ev.target.result); } catch (e) { /* skip */ }
+          if (++loaded === files.length) {
+            const n = designConvs.length;
+            document.getElementById('design-status').textContent = '✓ ' + n.toLocaleString() + ' design chat' + (n !== 1 ? 's' : '');
+            document.getElementById('design-zone').classList.add('loaded');
+            setDesignRow(n);
+            checkBothLoaded();
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    function setCountRow(rowId, valId, count, noun) {
+      const row = document.getElementById(rowId);
+      const val = document.getElementById(valId);
+      if (count) {
+        row.classList.add('found'); row.classList.remove('missing');
+        val.textContent = count.toLocaleString() + ' ' + noun + (count !== 1 ? 's' : '');
+      } else {
+        row.classList.add('missing'); row.classList.remove('found');
+        val.textContent = 'Not found (optional)';
+      }
+    }
+    function setDesignRow(count) { setCountRow('det-designs', 'det-designs-val', count, 'design chat'); }
+
 
     function buildProjectMap() {
       projectMap = {};
@@ -579,7 +673,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function checkBothLoaded() {
-      if (usersData && conversationsData.length) {
+      if (usersData && (conversationsData.length || designConvs.length)) {
         document.getElementById('load-btn-container').classList.remove('hidden');
       }
     }
@@ -603,7 +697,64 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return path.split('.').reduce((acc, part) => acc?.[part], obj);
     }
 
+    // ─── Design chats ────────────────────────────────────────────────────────
+    // Design chats use a different schema (messages/role/content-object) than
+    // conversations (chat_messages/sender/text). Normalise them into the same
+    // conversation shape so they flow through grouping, search, usage and CSV.
+    function extractDesignText(content) {
+      if (!content) return '';
+      if (typeof content === 'string') return content;
+      if (typeof content.content === 'string' && content.content.trim()) return content.content;
+      if (Array.isArray(content.contentBlocks)) {
+        return content.contentBlocks
+          .filter(b => b && b.type === 'text' && b.text)
+          .map(b => b.text).join('\n');
+      }
+      return '';
+    }
+
+    function normalizeDesignChat(dc) {
+      const rawMsgs = Array.isArray(dc.messages) ? dc.messages : [];
+      let ownerUuid = null;
+      const messages = rawMsgs.map(m => {
+        const c = m.content || {};
+        if (!ownerUuid && c.authorAccountUuid) ownerUuid = c.authorAccountUuid;
+        return {
+          sender: m.role === 'assistant' ? 'assistant' : 'human',
+          text: extractDesignText(c),
+          created_at: m.created_at || c.timestamp || dc.created_at
+        };
+      });
+      return {
+        uuid: dc.uuid,
+        name: dc.title && dc.title !== 'Chat' ? dc.title : 'Design chat',
+        created_at: dc.created_at,
+        updated_at: dc.updated_at,
+        account: { uuid: ownerUuid },
+        chat_messages: messages,
+        _isDesignChat: true,
+        _designProject: dc.project?.name || null
+      };
+    }
+
+    // Parse one raw design-chat JSON string and stage it for merge.
+    function ingestDesignChat(text) {
+      const json = JSON.parse(text);
+      const list = Array.isArray(json) ? json : [json];
+      list.forEach(dc => { if (dc && dc.uuid) designConvs.push(normalizeDesignChat(dc)); });
+    }
+
+    // Merge staged design chats into conversationsData (idempotent by uuid).
+    function mergeDesignChats() {
+      if (!designConvs.length) return;
+      const seen = new Set(conversationsData.map(c => c.uuid));
+      designConvs.forEach(dc => { if (!seen.has(dc.uuid)) conversationsData.push(dc); });
+    }
+
     function processData() {
+      // Design chats link via account.uuid; fall back to it when there is no
+      // conversations.json to auto-detect from.
+      if (!convUuidField && designConvs.length) convUuidField = 'account.uuid';
       if (!userUuidField || !usernameField || !convUuidField) {
         showError('Could not auto-detect field mappings. Please check your files.');
         return;
@@ -618,6 +769,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           count: 0
         };
       });
+      mergeDesignChats();
       reprocessConversations();
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('viewer-section').classList.remove('hidden');
@@ -651,32 +803,116 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const dateRange = earliest && latest
         ? `${earliest.toLocaleDateString()} – ${latest.toLocaleDateString()}` : '—';
 
+      // Design chats are merged into allConvs; surface them as a quick stat.
+      const designConvsList = allConvs.filter(c => c._isDesignChat);
+      const designCount = designConvsList.length;
+      const designUsers = new Set(designConvsList.map(c => c.account?.uuid).filter(Boolean)).size;
+      const projCount = Object.keys(projectMap).length;
+      const viewHint = '<span style="font-size:0.7rem;color:#60a5fa;">↓ view</span>';
+
+      // Engagement extras for the second card row.
+      let topUser = null, topCount = 0;
+      Object.values(userMap).forEach(u => { if (u.count > topCount) { topCount = u.count; topUser = u; } });
+      const avgPerUser = activeUsers ? (allConvs.length / activeUsers).toFixed(1) : '0';
+      const dayCounts = {};
+      allConvs.forEach(c => {
+        const d = new Date(c.created_at);
+        if (!isNaN(d)) { const k = d.toISOString().slice(0, 10); dayCounts[k] = (dayCounts[k] || 0) + 1; }
+      });
+      let busiestDay = null, busiestCount = 0;
+      Object.entries(dayCounts).forEach(([k, v]) => { if (v > busiestCount) { busiestCount = v; busiestDay = k; } });
+      const busiestLabel = busiestDay ? new Date(busiestDay + 'T00:00:00').toLocaleDateString() : '—';
+
       document.getElementById('team-stats').innerHTML = `
-        <div class="stat-card">
-          <div class="stat-label">Active Users</div>
+        <div class="stat-card clickable-card" onclick="jumpTo('leaderboard-card')" title="Jump to users">
+          <div class="stat-label">Active Users ${viewHint}</div>
           <div class="stat-value">${activeUsers}</div>
           <div class="stat-sub">of ${Object.keys(userMap).length} total</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Total Conversations</div>
+        <div class="stat-card clickable-card" onclick="jumpTo('activity-card')" title="Jump to team activity">
+          <div class="stat-label">Total Conversations ${viewHint}</div>
           <div class="stat-value">${allConvs.length.toLocaleString()}</div>
           <div class="stat-sub">${dateRange}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Total Messages</div>
+        <div class="stat-card clickable-card" onclick="jumpTo('activity-card')" title="Jump to team activity">
+          <div class="stat-label">Total Messages ${viewHint}</div>
           <div class="stat-value">${totalMsgs.toLocaleString()}</div>
           <div class="stat-sub">avg ${allConvs.length ? (totalMsgs / allConvs.length).toFixed(1) : 0} per conversation</div>
         </div>
-                <div class="stat-card">
-          <div class="stat-label">Projects</div>
-          <div class="stat-value">${Object.keys(projectMap).length || '\u2014'}</div>
-          <div class="stat-sub">${Object.keys(projectMap).length ? Object.keys(projectMap).length + ' projects loaded' : 'No projects file loaded'}</div>
+        <div class="stat-card${projCount ? ' clickable-card' : ''}"${projCount ? ' onclick="jumpTo(\'projects-overview\')" title="Jump to projects"' : ''}>
+          <div class="stat-label">Projects${projCount ? ' ' + viewHint : ''}</div>
+          <div class="stat-value">${projCount || '\u2014'}</div>
+          <div class="stat-sub">${projCount ? projCount + ' projects loaded' : 'No projects file loaded'}</div>
+        </div>
+        <div class="stat-card${designCount ? ' clickable-card' : ''}"${designCount ? ' onclick="jumpTo(\'design-overview\')" title="Jump to design chats"' : ''}>
+          <div class="stat-label">\ud83c\udfa8 Design Chats${designCount ? ' ' + viewHint : ''}</div>
+          <div class="stat-value">${designCount || '\u2014'}</div>
+          <div class="stat-sub">${designCount ? 'by ' + designUsers + ' user' + (designUsers !== 1 ? 's' : '') : 'None in this export'}</div>
+        </div>
+        <div class="stat-card${topUser ? ' clickable-card' : ''}"${topUser ? ` onclick="selectUser('${topUser.uuid}')" title="Open this user"` : ''}>
+          <div class="stat-label">Most Active User${topUser ? ' ' + viewHint : ''}</div>
+          <div class="stat-value" style="font-size:1.1rem;">${topUser ? escapeHtml(topUser.name) : '\u2014'}</div>
+          <div class="stat-sub">${topUser ? topCount.toLocaleString() + ' conversations' : 'No activity'}</div>
+        </div>
+        <div class="stat-card clickable-card" onclick="jumpTo('leaderboard-card')" title="Jump to users">
+          <div class="stat-label">Avg / Active User ${viewHint}</div>
+          <div class="stat-value">${avgPerUser}</div>
+          <div class="stat-sub">conversations per active user</div>
+        </div>
+        <div class="stat-card${busiestDay ? ' clickable-card' : ''}"${busiestDay ? ' onclick="jumpTo(\'activity-card\')" title="Jump to team activity"' : ''}>
+          <div class="stat-label">Busiest Day${busiestDay ? ' ' + viewHint : ''}</div>
+          <div class="stat-value" style="font-size:1.1rem;">${busiestLabel}</div>
+          <div class="stat-sub">${busiestDay ? busiestCount.toLocaleString() + ' conversations' : 'No activity'}</div>
         </div>
       `;
 
       renderTeamActivity();
       renderUserLeaderboard();
       renderTeamProjects();
+      renderTeamDesignChats();
+    }
+
+    function renderTeamDesignChats() {
+      const designList = conversationsData.filter(c => c._isDesignChat);
+      const el = document.getElementById('design-overview');
+      if (!designList.length) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      document.getElementById('design-overview-count').textContent =
+        designList.length + ' design chat' + (designList.length !== 1 ? 's' : '');
+      const sorted = [...designList].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      document.getElementById('design-table').innerHTML = `
+        <table class="data-table">
+          <thead><tr>
+            <th>Title</th><th>User</th><th>Project</th><th>Created</th><th>Messages</th>
+          </tr></thead>
+          <tbody>
+            ${sorted.map(c => {
+              const u = userMap[c.account?.uuid];
+              const clickable = !!u;
+              return `<tr class="${clickable ? '' : 'non-clickable'}"${clickable ? ` onclick="openUserDesign('${c.account.uuid}')"` : ''}>
+                <td style="font-weight:500;">${escapeHtml(c.name || 'Design chat')}</td>
+                <td>${escapeHtml(u?.name || '—')}</td>
+                <td>${escapeHtml(c._designProject || '—')}</td>
+                <td style="white-space:nowrap;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
+                <td>${c.chat_messages?.length || 0}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    // Open a user's detail filtered to just their design chats.
+    function openUserDesign(uuid) {
+      const f = document.getElementById('design-filter');
+      if (f) f.value = 'only';
+      selectUser(uuid);
+    }
+
+    function jumpTo(id) {
+      const el = document.getElementById(id);
+      // offsetParent is null when the element (or an ancestor) is display:none.
+      if (el && el.offsetParent !== null) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function switchTeamPeriod(period) {
@@ -792,7 +1028,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const userConvs = convByUser[selectedUserId] || [];
       const userName = userMap[selectedUserId]?.name || 'Unknown';
 
+      // The design filter only appears for users who actually have design chats.
+      const filterEl = document.getElementById('design-filter');
+      const hasDesign = userConvs.some(c => c._isDesignChat);
+      filterEl.style.display = hasDesign ? '' : 'none';
+      if (!hasDesign) filterEl.value = 'all';
+      const designFilter = filterEl.value;
+
       const filtered = userConvs.filter(c => {
+        if (designFilter === 'only' && !c._isDesignChat) return false;
+        if (designFilter === 'hide' && c._isDesignChat) return false;
         if (!search) return true;
         return c.name?.toLowerCase().includes(search) ||
           c.chat_messages?.some(m => m.text?.toLowerCase().includes(search));
@@ -807,26 +1052,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      container.innerHTML = filtered.slice(0, 100).map((conv, i) => `
+      container.innerHTML = filtered.slice(0, 100).map((conv, i) => {
+        const designTag = conv._isDesignChat
+          ? `<span style="font-size:0.7rem;padding:1px 7px;border-radius:9px;background:rgba(168,85,247,0.18);color:#c4b5fd;margin-left:8px;vertical-align:middle;">🎨 Design${conv._designProject ? ' · ' + escapeHtml(conv._designProject) : ''}</span>`
+          : '';
+        return `
         <div class="conversation">
           <div class="conv-header" onclick="toggleConv(this, ${i})">
             <span class="arrow">▶</span>
             <div class="conv-title">
-              <h3>${escapeHtml(conv.name || 'Untitled Conversation')}</h3>
+              <h3>${escapeHtml(conv.name || 'Untitled Conversation')}${designTag}</h3>
               <p>${formatDate(conv.created_at)}</p>
             </div>
             <span class="conv-badge">${conv.chat_messages?.length || 0} msgs</span>
           </div>
           <div class="messages hidden" id="msgs-${i}">
-            ${(conv.chat_messages || []).map(m => `
+            ${(conv.chat_messages || []).map(m => {
+              const txt = m.text || '';
+              const body = txt.trim()
+                ? escapeHtml(txt.substring(0, 3000)) + (txt.length > 3000 ? '…' : '')
+                : '<span style="color:#6b7280;font-style:italic;">(no content — not included in this export)</span>';
+              return `
               <div class="message ${m.sender}">
                 <div class="sender">${m.sender === 'human' ? escapeHtml(userName) : 'Claude'}</div>
-                <div class="text">${escapeHtml((m.text || '').substring(0, 3000))}${(m.text?.length || 0) > 3000 ? '…' : ''}</div>
-              </div>
-            `).join('')}
+                <div class="text">${body}</div>
+              </div>`;
+            }).join('')}
           </div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
 
       if (filtered.length > 100) {
         container.innerHTML += '<p style="text-align:center;padding:20px;color:#6b7280;font-size:0.85rem;">Showing first 100. Use search to find specific conversations.</p>';
@@ -986,20 +1240,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('user-zone').classList.remove('loaded');
       document.getElementById('conv-zone').classList.remove('loaded');
       document.getElementById('proj-zone').classList.remove('loaded');
+      document.getElementById('design-zone').classList.remove('loaded');
       document.getElementById('folder-zone').classList.remove('loaded');
       document.getElementById('user-status').textContent = 'Click or drag & drop';
       document.getElementById('conv-status').textContent = 'Click or drag & drop';
       document.getElementById('proj-status').textContent = 'Click or drag & drop';
+      document.getElementById('design-status').textContent = 'Click or drag & drop';
       document.getElementById('folder-status').textContent = 'Click to select your Claude Teams export folder \u2014 files are detected automatically';
       document.getElementById('detected-files').classList.add('hidden');
       document.getElementById('load-btn-container').classList.add('hidden');
       document.getElementById('user-input').value = '';
       document.getElementById('conv-input').value = '';
       document.getElementById('proj-input').value = '';
+      document.getElementById('design-input').value = '';
       document.getElementById('folder-input').value = '';
       document.getElementById('zip-input').value = '';
       projectsData = [];
       projectMap = {};
+      designConvs = [];
+      setDesignRow(0);
       document.getElementById('viewer-section').classList.add('hidden');
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');

@@ -11,10 +11,12 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 ## Features
 
 - **Team overview dashboard** — Instantly see team-wide stats and activity after loading
+- **At-a-glance stat cards** — Active users, totals, most active user, busiest day, avg per user, projects and design chats — each card jumps to its detailed section
 - **View conversations by user** — Click any team member to see all their conversations
 - **Usage summary** — See daily, weekly, and monthly conversation counts per user
-- **Projects support** — Load your projects export to see project activity alongside conversations
-- **Folder picker** — Select your entire export folder and CLUTCH auto-detects the right files
+- **Projects support** — Auto-detects the `projects/` export folder (or a legacy `projects.json`) and links each project to its creator
+- **Design chats support** — Auto-detects the `design_chats/` export folder, links each chat to its user and project, with a dedicated overview, a per-user "Design only" filter, and drill-down
+- **Folder & .zip picker** — Select your entire export folder or zip and CLUTCH auto-detects the right files; or pick each file type individually
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
 - **Export to CSV** — Download a user's conversation summary as a spreadsheet
