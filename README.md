@@ -1,6 +1,6 @@
 # CLUTCH — Claude's Live Usage & Team Conversation History
 
-![CLUTCH](images/clutch-dark-tag.jpg)
+![CLUTCH](images/clutch.jpg)
 
 A lightweight, offline HTML tool for viewing Claude Teams conversation exports organized by user — with daily, weekly, and monthly usage summaries.
 
@@ -22,12 +22,6 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 - **Search** — Find specific conversations or content within a user's history
 - **Export to CSV** — Download a user's conversation summary as a spreadsheet
 - **100% offline** — Works without an internet connection, all data stays on your machine
-
-## Screenshots
-
-![CLUTCH Dark](images/clutch-dark-notag.jpg)
-
-![CLUTCH Light](images/clutch-light-tag.jpg)
 
 ## Requirements
 
