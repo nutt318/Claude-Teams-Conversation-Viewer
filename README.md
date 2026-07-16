@@ -18,6 +18,7 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 - **Design chats support** — Auto-detects the `design_chats/` export folder, links each chat to its user and project, with a dedicated overview, a per-user "Design only" filter, and drill-down
 - **Cost & value analysis** — Enter your plan/seat cost and CLUTCH breaks down monthly/annual spend, license utilization, idle-seat waste, cost per active user / conversation / message, a reclaim recommendation, and a per-user value table flagging idle and low-usage seats
 - **Spend report import** — Load the per-user spend report CSV from the Claude admin analytics dashboard (Settings → Analytics → Export spend report) to enrich the Cost & Value view with API-reported requests, tokens, and net/gross spend per user. Idle-seat detection then uses the dashboard's own activity data, and the reclaim card lists the exact idle users with a one-click **Copy emails** button
+- **Members analytics import** — Load the members analytics CSV (`members-analytics-*.csv`) from the admin dashboard to see activity across *all* surfaces: chats, Claude Code sessions, cowork, file edits, PRs, and artifacts. Idle detection switches to the dashboard's own days-active figure — so heavy Claude Code users with zero chats aren't wrongly flagged as idle — plus seat tiers (Premium/Standard) with tier-aware idle-spend math, last-active dates, and owner-seat flagging in the reclaim list
 - **Folder & .zip picker** — Select your entire export folder or zip and CLUTCH auto-detects the right files; or pick each file type individually
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
@@ -75,10 +76,18 @@ Click "+ Add More Conversations" in the sidebar to load additional conversation 
 ### Importing a Spend Report (optional)
 
 1. In [claude.ai](https://claude.ai), go to **Settings → Analytics** (Owner/Primary Owner on Team; also Admins on Enterprise) and click **Export spend report** — pick a period of up to the last 90 days
-2. In CLUTCH, drop the CSV on the **💰 Spend report CSV** zone at load time, or use **💰 Import spend report CSV** inside the Cost & Value tab afterwards (it's also auto-detected when you select a folder/zip containing it)
+2. In CLUTCH, load your export first, then open the **Cost & Value** tab and click **💰 Import spend report CSV** (the CSV is also auto-detected when you select a folder/zip containing it)
 3. The Cost & Value tab switches to spend-based activity: per-user requests, tokens, and net spend columns; team totals for reported spend; and idle/low status derived from the report's request counts — matching the admin dashboard's "seats in use" figure
 
 Rows are matched to users by account UUID, falling back to email. Spend rows that match no loaded user (e.g. deprovisioned accounts) are flagged under the table. Column headers are detected by keyword, so minor naming changes in the export won't break the import.
+
+### Importing Members Analytics (optional)
+
+1. In [claude.ai](https://claude.ai), go to **Settings → Analytics** and export the members table — the file is named `members-analytics-<org-id>-<from>-to-<to>.csv`
+2. In CLUTCH, drop the CSV on the **📊 Members analytics CSV** zone on the load page (it's optional — you can proceed without it), use **📊 Import members analytics CSV** in the Cost & Value tab afterwards, or just include the file in the folder/zip you select and it's auto-detected
+3. The Cost & Value tab then shows per-user Chats, Code sessions, Cowork, Last Active, and Seat Tier columns, team-wide Code/Cowork totals, and a **Premium seat ($/month)** price input when Premium tiers are present
+
+Rows are matched to users by email (this export has no account UUID). Accounts whose seat tier is **Unassigned** hold no paid license — they're excluded from seat counts, idle detection, and the reclaim list, and show a grey **No seat** badge instead. Activity status follows a priority order: **members analytics (days active) → spend report (requests) → conversation counts**. Days-active counts activity on every surface — including Claude Code and cowork — so it matches the admin dashboard's seats-in-use figure and won't flag code-only users as idle. When both CSVs are loaded, status comes from members analytics while tokens and dollar figures still come from the spend report. Idle users with an Owner role are flagged so the role can be reassigned before the seat is reclaimed.
 
 ### Starting Over
 

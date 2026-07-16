@@ -38,6 +38,7 @@
     .cost-badge.idle { background: rgba(239,68,68,0.15); color: #fca5a5; }
     .cost-badge.low { background: rgba(234,179,8,0.15); color: #fde047; }
     .cost-badge.good { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .cost-badge.none { background: rgba(107,114,128,0.15); color: #9ca3af; }
     .detected-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px; font-size: 0.85rem; }
     .detected-row.found { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
     .detected-row.missing { opacity: 0.5; }
@@ -176,9 +177,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="detected-row" id="det-designs">
             <span class="det-icon">🎨</span><span class="det-label">Design chats</span><span class="det-val" id="det-designs-val">—</span>
           </div>
-          <div class="detected-row" id="det-spend">
-            <span class="det-icon">💰</span><span class="det-label">Spend report</span><span class="det-val" id="det-spend-val">—</span>
-          </div>
         </div>
 
         <!-- Or pick individually -->
@@ -204,10 +202,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span id="design-status">Click or drag &amp; drop</span>
             <input type="file" id="design-input" accept=".json" multiple>
           </label>
-          <label class="upload-zone" id="spend-zone" ondrop="handleDrop(event, 'spend')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
-            <div class="label">💰 Spend report CSV <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
-            <span id="spend-status-setup">Click or drag &amp; drop — from Analytics → Export spend report</span>
-            <input type="file" id="spend-input" accept=".csv">
+          <label class="upload-zone" id="members-zone" ondrop="handleDrop(event, 'members')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">📊 Members analytics CSV <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
+            <span id="members-status-setup">Click or drag &amp; drop — from Settings → Analytics. Adds Claude Code &amp; cowork activity and seat tiers to Cost &amp; Value; skip to proceed without it</span>
+            <input type="file" id="members-input" accept=".csv">
           </label>
         </div>
 
@@ -288,10 +286,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="card">
           <div class="section-header">
             <h3>License &amp; cost inputs</h3>
-            <label style="background:#374151;color:#d1d5db;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.78rem;">
-              💰 Import spend report CSV
-              <input type="file" id="cost-spend-input" accept=".csv" style="display:none;">
-            </label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="background:#374151;color:#d1d5db;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.78rem;">
+                💰 Import spend report CSV
+                <input type="file" id="cost-spend-input" accept=".csv" style="display:none;">
+              </label>
+              <label style="background:#374151;color:#d1d5db;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.78rem;">
+                📊 Import members analytics CSV
+                <input type="file" id="cost-members-input" accept=".csv" style="display:none;">
+              </label>
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;align-items:end;">
             <div>
@@ -315,9 +319,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <label class="cost-label" for="cost-threshold" id="cost-threshold-label">Low-usage threshold (convs)</label>
               <input type="number" id="cost-threshold" min="0" step="1" oninput="renderCostView()">
             </div>
+            <div id="cost-premium-wrap" style="display:none;">
+              <label class="cost-label" for="cost-premium">Premium seat ($ / month)</label>
+              <input type="number" id="cost-premium" min="0" step="1" oninput="renderCostView()">
+            </div>
           </div>
           <p style="font-size:0.75rem;color:#6b7280;margin-top:10px;">Preset prices are editable defaults — confirm your actual rate with your Anthropic plan. All figures are computed locally and reflect the export's date range.</p>
           <p id="spend-status" style="font-size:0.78rem;color:#4ade80;margin-top:8px;display:none;"></p>
+          <p id="members-status" style="font-size:0.78rem;color:#4ade80;margin-top:8px;display:none;"></p>
         </div>
 
         <div class="stat-grid" id="cost-stats"></div>
@@ -395,6 +404,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let spendRows = [];     // parsed rows from the admin spend report CSV
     let spendByUser = {};   // aggregated spend keyed by user uuid (or unmatched:email)
     let spendMeta = null;   // { fileName, rowCount, matchedUsers, unmatched }
+    let membersRows = [];   // parsed rows from the admin members analytics CSV
+    let membersByUser = {}; // per-user dashboard stats keyed by user uuid (or unmatched:email)
+    let membersMeta = null; // { fileName, rowCount, matchedUsers, unmatched }
     let idleEmailsCache = [];
     let loadedFiles = [];
     let projectMap = {};
@@ -414,8 +426,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('conv-input').addEventListener('change', e => loadConvFiles(Array.from(e.target.files)));
     document.getElementById('proj-input').addEventListener('change', e => loadProjectFiles(Array.from(e.target.files)));
     document.getElementById('design-input').addEventListener('change', e => loadDesignFiles(Array.from(e.target.files)));
-    document.getElementById('spend-input').addEventListener('change', e => loadSpendFile(e.target.files[0]));
     document.getElementById('cost-spend-input').addEventListener('change', e => { loadSpendFile(e.target.files[0]); e.target.value = ''; });
+    document.getElementById('cost-members-input').addEventListener('change', e => { loadMembersFile(e.target.files[0]); e.target.value = ''; });
+    document.getElementById('members-input').addEventListener('change', e => loadMembersFile(e.target.files[0]));
     document.getElementById('folder-input').addEventListener('change', e => handleFolderSelect(Array.from(e.target.files)));
     document.getElementById('zip-input').addEventListener('change', e => handleZipSelect(e.target.files[0]));
     document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
@@ -426,9 +439,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       e.preventDefault();
       e.currentTarget.classList.remove('dragover');
       const all = Array.from(e.dataTransfer.files);
-      if (type === 'spend') {
+      if (type === 'members') {
         const csv = all.find(f => f.name.toLowerCase().endsWith('.csv'));
-        if (csv) loadSpendFile(csv);
+        if (csv) loadMembersFile(csv);
         return;
       }
       const files = all.filter(f => f.name.endsWith('.json'));
@@ -530,8 +543,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const csvEntries = Object.values(zip.files).filter(f =>
           !f.dir && f.name.toLowerCase().endsWith('.csv') && !f.name.includes('__MACOSX')
         );
-        const spendEntry = csvEntries.find(f => f.name.toLowerCase().includes('spend')) ||
-          (csvEntries.length === 1 ? csvEntries[0] : null);
 
         if (!jsonEntries.length) {
           showError('No JSON files found in the zip.');
@@ -571,7 +582,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         setRow('det-convs', 'det-convs-val', convEntries.length ? convEntries : null, false);
         setCountRow('det-projects', 'det-projects-val', projEntries.length, 'project');
         setCountRow('det-designs', 'det-designs-val', designEntries.length, 'design chat');
-        setSpendRow(spendEntry ? spendEntry.name.split('/').pop() : null);
 
         // Extract and load each file
         const readEntry = entry =>
@@ -626,10 +636,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           })
         );
 
-        if (spendEntry) promises.push(
-          spendEntry.async('string').then(text => {
-            try { ingestSpendCSV(text, spendEntry.name.split('/').pop()); markSpendLoaded(); }
-            catch(e) { showError('Error parsing spend report: ' + e.message); }
+        if (csvEntries.length) promises.push(
+          Promise.all(csvEntries.map(f =>
+            f.async('string').then(text => ({ name: f.name.split('/').pop(), text }))
+          )).then(csvs => {
+            csvs.forEach(c => { c.kind = classifyCsvName(c.name) || classifyCsvHeader(c.text); });
+            const members = csvs.find(c => c.kind === 'members');
+            const spend = csvs.find(c => c.kind === 'spend') ||
+              (csvs.length === 1 && !csvs[0].kind ? csvs[0] : null);
+            if (members) {
+              try { ingestClassifiedCsv(members.text, members.name, 'members'); }
+              catch(e) { showError('Error parsing members analytics: ' + e.message); }
+            }
+            if (spend) {
+              try { ingestClassifiedCsv(spend.text, spend.name, 'spend'); }
+              catch(e) { showError('Error parsing spend report: ' + e.message); }
+            }
           })
         );
 
@@ -660,9 +682,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function handleFolderSelect(files) {
       const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
       const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
-      const spendFile = csvFiles.find(f => f.name.toLowerCase().includes('spend')) ||
-        (csvFiles.length === 1 ? csvFiles[0] : null);
-      if (!jsonFiles.length && !spendFile) { showError('No JSON files found in the selected folder.'); return; }
+      const membersFile = csvFiles.find(f => classifyCsvName(f.name) === 'members');
+      const spendFile = csvFiles.find(f => classifyCsvName(f.name) === 'spend');
+      const unknownCsv = (!membersFile && !spendFile && csvFiles.length === 1) ? csvFiles[0] : null;
+      if (!jsonFiles.length && !spendFile && !membersFile && !unknownCsv) { showError('No JSON files found in the selected folder.'); return; }
 
       let usersFile = null, convFiles = [], projFiles = [], designFiles = [];
       jsonFiles.forEach(f => {
@@ -693,13 +716,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       setRow('det-convs', 'det-convs-val', convFiles.length ? convFiles : null, false);
       setCountRow('det-projects', 'det-projects-val', projFiles.length, 'project');
       setCountRow('det-designs', 'det-designs-val', designFiles.length, 'design chat');
-      setSpendRow(spendFile ? spendFile.name : null);
 
       if (usersFile) loadUserFile(usersFile);
       if (convFiles.length) loadConvFiles(convFiles);
       if (projFiles.length) loadProjectFiles(projFiles);
       if (designFiles.length) loadDesignFiles(designFiles);
       if (spendFile) loadSpendFile(spendFile);
+      if (membersFile) loadMembersFile(membersFile);
+      if (unknownCsv) loadCsvFile(unknownCsv);
     }
 
     function loadProjectFiles(files) {
@@ -756,18 +780,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
     function setDesignRow(count) { setCountRow('det-designs', 'det-designs-val', count, 'design chat'); }
-
-    function setSpendRow(name) {
-      const row = document.getElementById('det-spend');
-      const val = document.getElementById('det-spend-val');
-      if (name) {
-        row.classList.add('found'); row.classList.remove('missing');
-        val.textContent = name;
-      } else {
-        row.classList.add('missing'); row.classList.remove('found');
-        val.textContent = 'Not found (optional)';
-      }
-    }
 
     // ─── Spend report (admin analytics CSV) ─────────────────────────────────
     // The Claude admin analytics dashboard exports a per-user, per-model spend
@@ -872,37 +884,165 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateSpendStatusUI();
     }
 
-    function loadSpendFile(file) {
+    // ─── Members analytics (admin dashboard members CSV) ────────────────────
+    // The Claude admin analytics dashboard also exports a per-member activity
+    // CSV (members-analytics-*.csv): role, seat tier, last active, days active,
+    // and per-surface usage (chats, Claude Code sessions, cowork, artifacts).
+    // It has no UUID column, so rows are matched to users by email only.
+
+    function detectMembersColumns(header) {
+      const norm = header.map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const find = pred => norm.findIndex(pred);
+      return {
+        name: find(h => h === 'name'),
+        email: find(h => h.includes('email')),
+        role: find(h => h.includes('role')),
+        seatTier: find(h => h.includes('tier') || h.includes('seat')),
+        lastActive: find(h => h.includes('last') && h.includes('active')),
+        daysActive: find(h => h.includes('day') && h.includes('active')),
+        chats: find(h => h.includes('chat') && !h.includes('cowork')),
+        messages: find(h => h.includes('message') && !h.includes('cowork')),
+        projectsCreated: find(h => h.includes('project') && h.includes('creat')),
+        projectsUsed: find(h => h.includes('project') && h.includes('used')),
+        pullRequests: find(h => h.includes('pull')),
+        codeSessions: find(h => h.includes('code')),
+        fileEdits: find(h => h.includes('edit')),
+        coworkSessions: find(h => h.includes('cowork') && h.includes('session')),
+        coworkMessages: find(h => h.includes('cowork') && h.includes('message')),
+        artifacts: find(h => h.includes('artifact'))
+      };
+    }
+
+    function ingestMembersCSV(text, fileName) {
+      const rows = parseCSV(text);
+      if (rows.length < 2) throw new Error('the CSV has no data rows');
+      const cols = detectMembersColumns(rows[0]);
+      if (cols.email === -1) throw new Error('could not find a member email column');
+      if (cols.daysActive === -1 && cols.chats === -1) throw new Error('could not find a days-active or chats column');
+      const num = v => { const n = parseFloat(String(v ?? '').replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n; };
+      const cell = (r, i) => i !== -1 ? (r[i] || '').trim() : '';
+      const count = (r, i) => i !== -1 ? num(r[i]) : 0;
+      membersRows = rows.slice(1).map(r => ({
+        name: cell(r, cols.name),
+        email: cell(r, cols.email).toLowerCase(),
+        role: cell(r, cols.role),
+        seatTier: cell(r, cols.seatTier),
+        lastActive: cell(r, cols.lastActive),
+        daysActive: count(r, cols.daysActive),
+        chats: count(r, cols.chats),
+        messages: count(r, cols.messages),
+        projectsCreated: count(r, cols.projectsCreated),
+        projectsUsed: count(r, cols.projectsUsed),
+        pullRequests: count(r, cols.pullRequests),
+        codeSessions: count(r, cols.codeSessions),
+        fileEdits: count(r, cols.fileEdits),
+        coworkSessions: count(r, cols.coworkSessions),
+        coworkMessages: count(r, cols.coworkMessages),
+        artifacts: count(r, cols.artifacts)
+      })).filter(r => r.email);
+      if (!membersRows.length) throw new Error('no rows with a member email found');
+      membersMeta = { fileName, rowCount: membersRows.length, matchedUsers: null, unmatched: [] };
+    }
+
+    // Join members rows to loaded users by email and aggregate one entry per user.
+    function buildMembersMap() {
+      membersByUser = {};
+      if (!membersRows.length || !Object.keys(userMap).length) { updateMembersStatusUI(); return; }
+      const emailIndex = {};
+      Object.values(userMap).forEach(u => { if (u.email) emailIndex[u.email.toLowerCase()] = u.uuid; });
+      const unmatched = new Set();
+      membersRows.forEach(r => {
+        const key = emailIndex[r.email] || null;
+        if (!key) unmatched.add(r.email || r.name);
+        const target = key || ('unmatched:' + (r.email || r.name));
+        if (!membersByUser[target]) membersByUser[target] = {
+          role: '', seatTier: '', lastActive: '', daysActive: 0, chats: 0, messages: 0,
+          projectsCreated: 0, projectsUsed: 0, pullRequests: 0, codeSessions: 0, fileEdits: 0,
+          coworkSessions: 0, coworkMessages: 0, artifacts: 0, matched: !!key
+        };
+        const m = membersByUser[target];
+        if (r.role && !m.role) m.role = r.role;
+        if (r.seatTier && !m.seatTier) m.seatTier = r.seatTier;
+        if (r.lastActive > m.lastActive) m.lastActive = r.lastActive;
+        m.daysActive += r.daysActive;
+        m.chats += r.chats;
+        m.messages += r.messages;
+        m.projectsCreated += r.projectsCreated;
+        m.projectsUsed += r.projectsUsed;
+        m.pullRequests += r.pullRequests;
+        m.codeSessions += r.codeSessions;
+        m.fileEdits += r.fileEdits;
+        m.coworkSessions += r.coworkSessions;
+        m.coworkMessages += r.coworkMessages;
+        m.artifacts += r.artifacts;
+      });
+      membersMeta.matchedUsers = Object.values(membersByUser).filter(m => m.matched).length;
+      membersMeta.unmatched = [...unmatched];
+      updateMembersStatusUI();
+    }
+
+    // ─── CSV classification & loading ────────────────────────────────────────
+    // Route a CSV to the right ingester: filename first ("members"/"spend"),
+    // then header keywords, defaulting to the spend report for backwards
+    // compatibility with the old single-CSV assumption.
+
+    function classifyCsvName(name) {
+      const n = (name || '').toLowerCase();
+      if (n.includes('member')) return 'members';
+      if (n.includes('spend')) return 'spend';
+      return null;
+    }
+
+    function classifyCsvHeader(text) {
+      try {
+        const header = parseCSV(String(text).slice(0, 2000))[0] || [];
+        const norm = header.map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+        if (norm.some(h => h.includes('seattier') || h.includes('daysactive'))) return 'members';
+        if (norm.some(h => h.includes('token') || h.includes('spend') || h.includes('cost'))) return 'spend';
+      } catch (e) { /* unclassifiable */ }
+      return null;
+    }
+
+    function ingestClassifiedCsv(text, fileName, kind) {
+      if (kind === 'members') { ingestMembersCSV(text, fileName); updateMembersStatusUI(); }
+      else { ingestSpendCSV(text, fileName); updateSpendStatusUI(); }
+    }
+
+    function loadCsvFile(file, kind) {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = ev => {
+        const text = ev.target.result;
+        const k = kind || classifyCsvName(file.name) || classifyCsvHeader(text) || 'spend';
         try {
-          ingestSpendCSV(ev.target.result, file.name);
-          markSpendLoaded();
+          ingestClassifiedCsv(text, file.name, k);
           if (Object.keys(userMap).length) {
-            buildSpendMap();
+            if (k === 'members') buildMembersMap(); else buildSpendMap();
             if (viewMode === 'cost') renderCostView();
           }
           hideError();
         } catch (err) {
-          showError('Error parsing spend report: ' + err.message);
-          document.getElementById('spend-status-setup').textContent = 'Error';
+          showError('Error parsing ' + (k === 'members' ? 'members analytics' : 'spend report') + ': ' + err.message);
+          if (k === 'members') document.getElementById('members-status-setup').textContent = 'Error — see message above';
         }
       };
       reader.readAsText(file);
     }
 
-    function markSpendLoaded() {
-      document.getElementById('spend-status-setup').textContent =
-        '✓ ' + spendMeta.rowCount.toLocaleString() + ' spend row' + (spendMeta.rowCount !== 1 ? 's' : '');
-      document.getElementById('spend-zone').classList.add('loaded');
-      setSpendRow(spendMeta.fileName);
-      updateSpendStatusUI();
+    function loadSpendFile(file) { loadCsvFile(file, 'spend'); }
+    function loadMembersFile(file) { loadCsvFile(file, 'members'); }
+
+    // The low-usage threshold counts whichever activity source drives status:
+    // members analytics (days active) > spend report (requests) > conversations.
+    function updateThresholdLabel() {
+      document.getElementById('cost-threshold-label').textContent =
+        membersRows.length ? 'Low-usage threshold (days active)'
+        : spendRows.length ? 'Low-usage threshold (requests)'
+        : 'Low-usage threshold (convs)';
     }
 
     function updateSpendStatusUI() {
       const note = document.getElementById('spend-status');
-      const thLabel = document.getElementById('cost-threshold-label');
       if (spendMeta) {
         let txt = '📄 ' + spendMeta.fileName + ' — ' + spendMeta.rowCount.toLocaleString() + ' rows';
         if (spendMeta.matchedUsers != null) {
@@ -911,11 +1051,32 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         note.textContent = txt;
         note.style.display = '';
-        thLabel.textContent = 'Low-usage threshold (requests)';
       } else {
         note.style.display = 'none';
-        thLabel.textContent = 'Low-usage threshold (convs)';
       }
+      updateThresholdLabel();
+    }
+
+    function updateMembersStatusUI() {
+      const note = document.getElementById('members-status');
+      const setup = document.getElementById('members-status-setup');
+      const zone = document.getElementById('members-zone');
+      if (membersMeta) {
+        let txt = '📊 ' + membersMeta.fileName + ' — ' + membersMeta.rowCount.toLocaleString() + ' member' + (membersMeta.rowCount !== 1 ? 's' : '');
+        if (membersMeta.matchedUsers != null) {
+          txt += ', ' + membersMeta.matchedUsers + ' matched';
+          if (membersMeta.unmatched.length) txt += ', ' + membersMeta.unmatched.length + ' unmatched';
+        }
+        note.textContent = txt;
+        note.style.display = '';
+        setup.textContent = '✓ ' + membersMeta.rowCount.toLocaleString() + ' member' + (membersMeta.rowCount !== 1 ? 's' : '');
+        zone.classList.add('loaded');
+      } else {
+        note.style.display = 'none';
+        setup.textContent = 'Click or drag & drop — from Settings → Analytics. Adds Claude Code & cowork activity and seat tiers to Cost & Value; skip to proceed without it';
+        zone.classList.remove('loaded');
+      }
+      updateThresholdLabel();
     }
 
     function fmtTokens(n) {
@@ -1064,6 +1225,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       mergeDesignChats();
       reprocessConversations();
       buildSpendMap();
+      buildMembersMap();
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('viewer-section').classList.remove('hidden');
       renderTeamOverview();
@@ -1228,7 +1390,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function initCost() {
       document.getElementById('cost-preset').value = 'team-annual';
       document.getElementById('cost-perseat').value = COST_PRESETS['team-annual'];
-      document.getElementById('cost-seats').value = Object.keys(userMap).length;
+      // Default licensed seats to loaded users minus any members-analytics
+      // accounts with an "Unassigned" seat tier (they hold no paid license).
+      const unlicensed = Object.keys(userMap)
+        .filter(k => /unassign/i.test(membersByUser[k]?.seatTier || '')).length;
+      document.getElementById('cost-seats').value = Object.keys(userMap).length - unlicensed;
       document.getElementById('cost-threshold').value = 5;
     }
 
@@ -1255,13 +1421,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const threshold = parseInt(document.getElementById('cost-threshold').value) || 0;
 
       const users = Object.values(userMap);
-      // With a spend report loaded, activity means API-reported requests over the
-      // report's period — this matches the admin dashboard's active-seat count.
-      // Otherwise fall back to conversation counts from the export.
+      // Activity source priority: members analytics (days active — counts chats,
+      // Claude Code, and cowork, matching the admin dashboard's seats-in-use) >
+      // spend report requests > conversation counts from the export.
       const hasSpend = spendRows.length > 0;
-      const activityOf = u => hasSpend ? (spendByUser[u.uuid]?.requests || 0) : u.count;
-      const activeUsers = users.filter(u => activityOf(u) > 0).length;
-      const idleUsers = users.filter(u => activityOf(u) === 0).length;
+      const hasMembers = membersRows.length > 0;
+      const activityOf = u => hasMembers ? (membersByUser[u.uuid]?.daysActive || 0)
+        : hasSpend ? (spendByUser[u.uuid]?.requests || 0)
+        : u.count;
+      // Accounts whose members-analytics seat tier is "Unassigned" hold no
+      // paid license — keep them out of seat, idle, and reclaim math.
+      const hasSeatOf = u => !hasMembers || !/unassign/i.test(membersByUser[u.uuid]?.seatTier || '');
+      const licensedUsers = users.filter(hasSeatOf);
+      const unlicensedCount = users.length - licensedUsers.length;
+      const activeUsers = licensedUsers.filter(u => activityOf(u) > 0).length;
+      const idleUsers = licensedUsers.filter(u => activityOf(u) === 0).length;
       const idleSeats = Math.max(0, seats - activeUsers);
       const totalConvs = conversationsData.length;
       const totalMsgs = conversationsData.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
@@ -1277,15 +1451,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       }
 
+      let memberTotals = null;
+      if (hasMembers) {
+        memberTotals = { chats: 0, codeSessions: 0, fileEdits: 0, pullRequests: 0,
+          coworkSessions: 0, coworkMessages: 0, active: 0, matched: 0, premium: 0 };
+        users.forEach(u => {
+          const m = membersByUser[u.uuid];
+          if (!m) return;
+          memberTotals.matched++;
+          if (m.daysActive > 0) memberTotals.active++;
+          if (/premium/i.test(m.seatTier || '')) memberTotals.premium++;
+          memberTotals.chats += m.chats;
+          memberTotals.codeSessions += m.codeSessions;
+          memberTotals.fileEdits += m.fileEdits;
+          memberTotals.pullRequests += m.pullRequests;
+          memberTotals.coworkSessions += m.coworkSessions;
+          memberTotals.coworkMessages += m.coworkMessages;
+        });
+      }
+
+      // Premium seat pricing shows only when members data contains Premium
+      // tiers; it defaults to the standard rate until edited.
+      const premiumWrap = document.getElementById('cost-premium-wrap');
+      const premiumInput = document.getElementById('cost-premium');
+      const showPremium = !!(memberTotals && memberTotals.premium > 0);
+      premiumWrap.style.display = showPremium ? '' : 'none';
+      if (showPremium && premiumInput.value === '') premiumInput.value = perSeat;
+      const premiumRate = showPremium ? (parseFloat(premiumInput.value) || perSeat) : perSeat;
+      const seatRateOf = u => /premium/i.test(membersByUser[u.uuid]?.seatTier || '') ? premiumRate : perSeat;
+
       const dates = conversationsData.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
       const spanDays = dates.length
         ? Math.max(1, (Math.max(...dates) - Math.min(...dates)) / 86400000 + 1) : 30;
       const periodMonths = Math.max(spanDays / 30.44, 0.1);
 
-      const monthlySpend = perSeat * seats;
+      const idleList = licensedUsers.filter(u => activityOf(u) === 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      // With tier data, price each licensed seat by its tier; configured seats
+      // beyond the loaded licensed users use the standard rate.
+      const extraSeats = Math.max(0, seats - licensedUsers.length);
+      const monthlySpend = hasMembers
+        ? licensedUsers.reduce((s, u) => s + seatRateOf(u), 0) + extraSeats * perSeat
+        : perSeat * seats;
+      const idleSpend = hasMembers
+        ? idleList.reduce((s, u) => s + seatRateOf(u), 0) + extraSeats * perSeat
+        : perSeat * idleSeats;
       const periodSpend = monthlySpend * periodMonths;
       const utilization = seats ? (activeUsers / seats * 100) : 0;
-      const idleSpend = perSeat * idleSeats;
       const costPerActive = activeUsers ? monthlySpend / activeUsers : 0;
       const costPerConv = totalConvs ? periodSpend / totalConvs : 0;
       const costPerMsg = totalMsgs ? periodSpend / totalMsgs : 0;
@@ -1294,7 +1506,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('cost-stats').innerHTML = `
         <div class="stat-card"><div class="stat-label">Monthly Spend</div>
           <div class="stat-value">${fmtUSD(monthlySpend)}</div>
-          <div class="stat-sub">${seats} seats × ${fmtUSD(perSeat)}</div></div>
+          <div class="stat-sub">${showPremium
+            ? `${seats} seats · ${memberTotals.premium} premium at ${fmtUSD(premiumRate)}`
+            : `${seats} seats × ${fmtUSD(perSeat)}`}</div></div>
         <div class="stat-card"><div class="stat-label">Annual Spend</div>
           <div class="stat-value">${fmtUSD(monthlySpend * 12)}</div>
           <div class="stat-sub">at current rate</div></div>
@@ -1326,14 +1540,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="stat-card"><div class="stat-label">Tokens</div>
           <div class="stat-value">${fmtTokens(spendTotals.tokens)}</div>
           <div class="stat-sub">prompt + completion</div></div>` : ''}
+        ${hasMembers ? `
+        <div class="stat-card"><div class="stat-label">Code Sessions</div>
+          <div class="stat-value">${memberTotals.codeSessions.toLocaleString()}</div>
+          <div class="stat-sub">${memberTotals.fileEdits.toLocaleString()} file edits · ${memberTotals.pullRequests.toLocaleString()} PRs</div></div>
+        <div class="stat-card"><div class="stat-label">Cowork Sessions</div>
+          <div class="stat-value">${memberTotals.coworkSessions.toLocaleString()}</div>
+          <div class="stat-sub">${memberTotals.coworkMessages.toLocaleString()} cowork messages</div></div>
+        <div class="stat-card"><div class="stat-label">Dashboard Active</div>
+          <div class="stat-value">${memberTotals.active}</div>
+          <div class="stat-sub">of ${memberTotals.matched} matched — includes Claude Code</div></div>` : ''}
       `;
 
-      const lowUsers = users.filter(u => activityOf(u) > 0 && activityOf(u) <= threshold).length;
+      const lowUsers = licensedUsers.filter(u => activityOf(u) > 0 && activityOf(u) <= threshold).length;
       const reclaimMonthly = idleSpend;
-      const idleSource = hasSpend ? 'no requests in the spend report period' : 'no activity in this export';
-      const activityNoun = hasSpend ? 'request' : 'conversation';
-      const idleList = users.filter(u => activityOf(u) === 0)
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const idleSource = hasMembers ? '0 days active in the analytics period'
+        : hasSpend ? 'no requests in the spend report period' : 'no activity in this export';
+      const thresholdPhrase = hasMembers ? `${threshold} day${threshold !== 1 ? 's' : ''} active`
+        : hasSpend ? `${threshold} request${threshold !== 1 ? 's' : ''}`
+        : `${threshold} conversation${threshold !== 1 ? 's' : ''}`;
+      const isOwner = u => /owner/i.test(membersByUser[u.uuid]?.role || '');
+      const idleOwnerCount = hasMembers ? idleList.filter(isOwner).length : 0;
       idleEmailsCache = idleList.map(u => u.email).filter(Boolean);
       document.getElementById('cost-reclaim').innerHTML = `
         <div class="section-header"><h3>Reclaim opportunity</h3></div>
@@ -1343,11 +1570,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           : `<p style="font-size:0.95rem;color:#4ade80;">No idle seats — every licensed seat has activity. 👍</p>`}
         ${idleList.length ? `
           <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-            ${idleList.map(u => `<span style="font-size:0.78rem;background:#374151;border-radius:12px;padding:3px 10px;">${escapeHtml(u.name)}${u.email && u.email !== u.name ? ` <span style="color:#6b7280;">${escapeHtml(u.email)}</span>` : ''}</span>`).join('')}
+            ${idleList.map(u => `<span style="font-size:0.78rem;background:#374151;border-radius:12px;padding:3px 10px;">${escapeHtml(u.name)}${hasMembers && isOwner(u) ? ' <span style="color:#fbbf24;">(owner)</span>' : ''}${u.email && u.email !== u.name ? ` <span style="color:#6b7280;">${escapeHtml(u.email)}</span>` : ''}</span>`).join('')}
             ${idleEmailsCache.length ? `<button class="secondary" id="copy-idle-btn" onclick="copyIdleEmails()" style="font-size:0.75rem;padding:4px 10px;">Copy emails</button>` : ''}
           </div>` : ''}
+        ${idleOwnerCount > 0
+          ? `<p style="font-size:0.85rem;color:#fbbf24;margin-top:8px;">${idleOwnerCount} of these ${idleOwnerCount !== 1 ? 'are owner seats' : 'is an owner seat'} — reassign the role before reclaiming.</p>`
+          : ''}
         ${lowUsers > 0
-          ? `<p style="font-size:0.85rem;color:#9ca3af;margin-top:8px;">${lowUsers} active user${lowUsers !== 1 ? 's' : ''} at or below ${threshold} ${activityNoun}${threshold !== 1 ? 's' : ''} — review for right-sizing.</p>`
+          ? `<p style="font-size:0.85rem;color:#9ca3af;margin-top:8px;">${lowUsers} active user${lowUsers !== 1 ? 's' : ''} at or below ${thresholdPhrase} — review for right-sizing.</p>`
           : ''}
       `;
 
@@ -1355,38 +1585,58 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const sorted = [...users].sort((a, b) =>
         activityOf(a) - activityOf(b) || a.count - b.count || a.name.localeCompare(b.name));
       document.getElementById('cost-table-note').textContent =
-        `${activeUsers} active · ${idleUsers} idle of ${users.length} users` +
-        (hasSpend ? ' · status from spend report requests' : '');
-      const unmatchedNote = hasSpend && spendMeta?.unmatched?.length
-        ? `<p style="font-size:0.78rem;color:#fde047;margin-top:10px;">⚠ ${spendMeta.unmatched.length} spend-report identit${spendMeta.unmatched.length !== 1 ? 'ies' : 'y'} didn't match a loaded user (deprovisioned accounts?): ${escapeHtml(spendMeta.unmatched.slice(0, 8).join(', '))}${spendMeta.unmatched.length > 8 ? ` and ${spendMeta.unmatched.length - 8} more` : ''}</p>`
+        `${activeUsers} active · ${idleUsers} idle of ${licensedUsers.length} licensed users` +
+        (unlicensedCount ? ` · ${unlicensedCount} without a seat` : '') +
+        (hasMembers ? ' · status from members analytics (days active)'
+          : hasSpend ? ' · status from spend report requests' : '');
+      const unmatchedNoteFor = (meta, label) => meta?.unmatched?.length
+        ? `<p style="font-size:0.78rem;color:#fde047;margin-top:10px;">⚠ ${meta.unmatched.length} ${label} identit${meta.unmatched.length !== 1 ? 'ies' : 'y'} didn't match a loaded user (deprovisioned accounts?): ${escapeHtml(meta.unmatched.slice(0, 8).join(', '))}${meta.unmatched.length > 8 ? ` and ${meta.unmatched.length - 8} more` : ''}</p>`
         : '';
+      const unmatchedNote = (hasSpend ? unmatchedNoteFor(spendMeta, 'spend-report') : '') +
+        (hasMembers ? unmatchedNoteFor(membersMeta, 'members-analytics') : '');
+      const headCols = hasMembers
+        ? '<th>User</th><th>Convs</th><th>Chats</th><th>Code</th><th>Cowork</th><th>Last Active</th><th>Tier</th>' +
+          (hasSpend ? '<th>Net spend</th>' : '') + '<th>Status</th>'
+        : '<th>User</th><th>Conversations</th><th>Messages</th>' +
+          (hasSpend ? '<th>Requests</th><th>Tokens</th><th>Net spend</th>' : '<th>Seat $/mo</th><th>Cost / conv</th>') +
+          '<th>Status</th>';
       document.getElementById('cost-table').innerHTML = `
         <table class="data-table">
-          <thead><tr>
-            <th>User</th><th>Conversations</th><th>Messages</th>${hasSpend
-              ? '<th>Requests</th><th>Tokens</th><th>Net spend</th>'
-              : '<th>Seat $/mo</th><th>Cost / conv</th>'}<th>Status</th>
-          </tr></thead>
+          <thead><tr>${headCols}</tr></thead>
           <tbody>
             ${sorted.map(u => {
-              const msgs = (convByUser[u.uuid] || []).reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
-              const cpc = u.count ? periodSeatCost / u.count : 0;
               const sp = spendByUser[u.uuid];
               const activity = activityOf(u);
-              const status = activity === 0 ? 'idle' : (activity <= threshold ? 'low' : 'good');
-              const label = status === 'idle' ? 'Idle' : status === 'low' ? 'Low' : 'Active';
+              const status = !hasSeatOf(u) ? 'none'
+                : activity === 0 ? 'idle' : (activity <= threshold ? 'low' : 'good');
+              const label = status === 'none' ? 'No seat'
+                : status === 'idle' ? 'Idle' : status === 'low' ? 'Low' : 'Active';
               const clickable = u.count > 0;
-              const midCols = hasSpend
-                ? `<td>${(sp?.requests || 0).toLocaleString()}</td>
-                   <td>${fmtTokens((sp?.promptTokens || 0) + (sp?.completionTokens || 0))}</td>
-                   <td>${sp ? fmtUSD(sp.netSpend, 2) : '—'}</td>`
-                : `<td>${fmtUSD(perSeat)}</td>
-                   <td>${u.count ? fine(cpc) : '—'}</td>`;
+              let cells;
+              if (hasMembers) {
+                const m = membersByUser[u.uuid];
+                cells = `<td>${u.count.toLocaleString()}</td>
+                   <td>${(m?.chats || 0).toLocaleString()}</td>
+                   <td>${(m?.codeSessions || 0).toLocaleString()}</td>
+                   <td>${(m?.coworkSessions || 0).toLocaleString()}</td>
+                   <td>${m?.lastActive ? escapeHtml(m.lastActive) : '—'}</td>
+                   <td>${m?.seatTier ? escapeHtml(m.seatTier) : '—'}</td>` +
+                  (hasSpend ? `<td>${sp ? fmtUSD(sp.netSpend, 2) : '—'}</td>` : '');
+              } else {
+                const msgs = (convByUser[u.uuid] || []).reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+                const cpc = u.count ? periodSeatCost / u.count : 0;
+                cells = `<td>${u.count.toLocaleString()}</td>
+                   <td>${msgs.toLocaleString()}</td>` +
+                  (hasSpend
+                    ? `<td>${(sp?.requests || 0).toLocaleString()}</td>
+                       <td>${fmtTokens((sp?.promptTokens || 0) + (sp?.completionTokens || 0))}</td>
+                       <td>${sp ? fmtUSD(sp.netSpend, 2) : '—'}</td>`
+                    : `<td>${fmtUSD(perSeat)}</td>
+                       <td>${u.count ? fine(cpc) : '—'}</td>`);
+              }
               return `<tr class="${clickable ? '' : 'non-clickable'}"${clickable ? ` onclick="selectUser('${u.uuid}')"` : ''}>
                 <td style="font-weight:500;">${escapeHtml(u.name)}</td>
-                <td>${u.count.toLocaleString()}</td>
-                <td>${msgs.toLocaleString()}</td>
-                ${midCols}
+                ${cells}
                 <td><span class="cost-badge ${status}">${label}</span></td>
               </tr>`;
             }).join('')}
@@ -1744,13 +1994,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       spendRows = [];
       spendByUser = {};
       spendMeta = null;
+      membersRows = [];
+      membersByUser = {};
+      membersMeta = null;
       idleEmailsCache = [];
-      document.getElementById('spend-zone').classList.remove('loaded');
-      document.getElementById('spend-status-setup').textContent = 'Click or drag & drop — from Analytics → Export spend report';
-      document.getElementById('spend-input').value = '';
       updateSpendStatusUI();
+      updateMembersStatusUI();
+      document.getElementById('members-input').value = '';
+      document.getElementById('cost-premium-wrap').style.display = 'none';
+      document.getElementById('cost-premium').value = '';
       setDesignRow(0);
-      setSpendRow(null);
       document.getElementById('viewer-section').classList.add('hidden');
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');
