@@ -17,6 +17,7 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 - **Projects support** — Auto-detects the `projects/` export folder (or a legacy `projects.json`) and links each project to its creator
 - **Design chats support** — Auto-detects the `design_chats/` export folder, links each chat to its user and project, with a dedicated overview, a per-user "Design only" filter, and drill-down
 - **Cost & value analysis** — Enter your plan/seat cost and CLUTCH breaks down monthly/annual spend, license utilization, idle-seat waste, cost per active user / conversation / message, a reclaim recommendation, and a per-user value table flagging idle and low-usage seats
+- **Spend report import** — Load the per-user spend report CSV from the Claude admin analytics dashboard (Settings → Analytics → Export spend report) to enrich the Cost & Value view with API-reported requests, tokens, and net/gross spend per user. Idle-seat detection then uses the dashboard's own activity data, and the reclaim card lists the exact idle users with a one-click **Copy emails** button
 - **Folder & .zip picker** — Select your entire export folder or zip and CLUTCH auto-detects the right files; or pick each file type individually
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
@@ -70,6 +71,14 @@ Once both files are loaded, click the button to process the data.
 ### Adding More Conversations
 
 Click "+ Add More Conversations" in the sidebar to load additional conversation files at any time. The new data merges automatically.
+
+### Importing a Spend Report (optional)
+
+1. In [claude.ai](https://claude.ai), go to **Settings → Analytics** (Owner/Primary Owner on Team; also Admins on Enterprise) and click **Export spend report** — pick a period of up to the last 90 days
+2. In CLUTCH, drop the CSV on the **💰 Spend report CSV** zone at load time, or use **💰 Import spend report CSV** inside the Cost & Value tab afterwards (it's also auto-detected when you select a folder/zip containing it)
+3. The Cost & Value tab switches to spend-based activity: per-user requests, tokens, and net spend columns; team totals for reported spend; and idle/low status derived from the report's request counts — matching the admin dashboard's "seats in use" figure
+
+Rows are matched to users by account UUID, falling back to email. Spend rows that match no loaded user (e.g. deprovisioned accounts) are flagged under the table. Column headers are detected by keyword, so minor naming changes in the export won't break the import.
 
 ### Starting Over
 

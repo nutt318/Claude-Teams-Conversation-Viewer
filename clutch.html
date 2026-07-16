@@ -176,6 +176,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="detected-row" id="det-designs">
             <span class="det-icon">🎨</span><span class="det-label">Design chats</span><span class="det-val" id="det-designs-val">—</span>
           </div>
+          <div class="detected-row" id="det-spend">
+            <span class="det-icon">💰</span><span class="det-label">Spend report</span><span class="det-val" id="det-spend-val">—</span>
+          </div>
         </div>
 
         <!-- Or pick individually -->
@@ -200,6 +203,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <div class="label">🎨 Design chats JSON <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
             <span id="design-status">Click or drag &amp; drop</span>
             <input type="file" id="design-input" accept=".json" multiple>
+          </label>
+          <label class="upload-zone" id="spend-zone" ondrop="handleDrop(event, 'spend')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+            <div class="label">💰 Spend report CSV <span style="color:#6b7280;font-weight:400;">(optional)</span></div>
+            <span id="spend-status-setup">Click or drag &amp; drop — from Analytics → Export spend report</span>
+            <input type="file" id="spend-input" accept=".csv">
           </label>
         </div>
 
@@ -278,7 +286,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <!-- Cost & Value -->
       <div id="cost-view" class="hidden">
         <div class="card">
-          <div class="section-header"><h3>License &amp; cost inputs</h3></div>
+          <div class="section-header">
+            <h3>License &amp; cost inputs</h3>
+            <label style="background:#374151;color:#d1d5db;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;font-size:0.78rem;">
+              💰 Import spend report CSV
+              <input type="file" id="cost-spend-input" accept=".csv" style="display:none;">
+            </label>
+          </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;align-items:end;">
             <div>
               <label class="cost-label" for="cost-preset">Plan preset</label>
@@ -298,11 +312,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <input type="number" id="cost-seats" min="0" step="1" oninput="renderCostView()">
             </div>
             <div>
-              <label class="cost-label" for="cost-threshold">Low-usage threshold (convs)</label>
+              <label class="cost-label" for="cost-threshold" id="cost-threshold-label">Low-usage threshold (convs)</label>
               <input type="number" id="cost-threshold" min="0" step="1" oninput="renderCostView()">
             </div>
           </div>
           <p style="font-size:0.75rem;color:#6b7280;margin-top:10px;">Preset prices are editable defaults — confirm your actual rate with your Anthropic plan. All figures are computed locally and reflect the export's date range.</p>
+          <p id="spend-status" style="font-size:0.78rem;color:#4ade80;margin-top:8px;display:none;"></p>
         </div>
 
         <div class="stat-grid" id="cost-stats"></div>
@@ -377,6 +392,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let conversationsData = [];
     let projectsData = [];
     let designConvs = [];   // design chats normalised into conversation shape
+    let spendRows = [];     // parsed rows from the admin spend report CSV
+    let spendByUser = {};   // aggregated spend keyed by user uuid (or unmatched:email)
+    let spendMeta = null;   // { fileName, rowCount, matchedUsers, unmatched }
+    let idleEmailsCache = [];
     let loadedFiles = [];
     let projectMap = {};
     let userMap = {};
@@ -395,6 +414,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('conv-input').addEventListener('change', e => loadConvFiles(Array.from(e.target.files)));
     document.getElementById('proj-input').addEventListener('change', e => loadProjectFiles(Array.from(e.target.files)));
     document.getElementById('design-input').addEventListener('change', e => loadDesignFiles(Array.from(e.target.files)));
+    document.getElementById('spend-input').addEventListener('change', e => loadSpendFile(e.target.files[0]));
+    document.getElementById('cost-spend-input').addEventListener('change', e => { loadSpendFile(e.target.files[0]); e.target.value = ''; });
     document.getElementById('folder-input').addEventListener('change', e => handleFolderSelect(Array.from(e.target.files)));
     document.getElementById('zip-input').addEventListener('change', e => handleZipSelect(e.target.files[0]));
     document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
@@ -404,7 +425,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function handleDrop(e, type) {
       e.preventDefault();
       e.currentTarget.classList.remove('dragover');
-      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));
+      const all = Array.from(e.dataTransfer.files);
+      if (type === 'spend') {
+        const csv = all.find(f => f.name.toLowerCase().endsWith('.csv'));
+        if (csv) loadSpendFile(csv);
+        return;
+      }
+      const files = all.filter(f => f.name.endsWith('.json'));
       if (!files.length) return;
       if (type === 'user') loadUserFile(files[0]);
       else if (type === 'proj') loadProjectFiles(files);
@@ -500,6 +527,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const jsonEntries = Object.values(zip.files).filter(f =>
           !f.dir && f.name.toLowerCase().endsWith('.json') && !f.name.includes('__MACOSX')
         );
+        const csvEntries = Object.values(zip.files).filter(f =>
+          !f.dir && f.name.toLowerCase().endsWith('.csv') && !f.name.includes('__MACOSX')
+        );
+        const spendEntry = csvEntries.find(f => f.name.toLowerCase().includes('spend')) ||
+          (csvEntries.length === 1 ? csvEntries[0] : null);
 
         if (!jsonEntries.length) {
           showError('No JSON files found in the zip.');
@@ -539,6 +571,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         setRow('det-convs', 'det-convs-val', convEntries.length ? convEntries : null, false);
         setCountRow('det-projects', 'det-projects-val', projEntries.length, 'project');
         setCountRow('det-designs', 'det-designs-val', designEntries.length, 'design chat');
+        setSpendRow(spendEntry ? spendEntry.name.split('/').pop() : null);
 
         // Extract and load each file
         const readEntry = entry =>
@@ -593,6 +626,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           })
         );
 
+        if (spendEntry) promises.push(
+          spendEntry.async('string').then(text => {
+            try { ingestSpendCSV(text, spendEntry.name.split('/').pop()); markSpendLoaded(); }
+            catch(e) { showError('Error parsing spend report: ' + e.message); }
+          })
+        );
+
         if (designEntries.length) promises.push(
           Promise.all(designEntries.map(readEntry)).then(results => {
             designConvs = [];
@@ -619,7 +659,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function handleFolderSelect(files) {
       const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
-      if (!jsonFiles.length) { showError('No JSON files found in the selected folder.'); return; }
+      const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+      const spendFile = csvFiles.find(f => f.name.toLowerCase().includes('spend')) ||
+        (csvFiles.length === 1 ? csvFiles[0] : null);
+      if (!jsonFiles.length && !spendFile) { showError('No JSON files found in the selected folder.'); return; }
 
       let usersFile = null, convFiles = [], projFiles = [], designFiles = [];
       jsonFiles.forEach(f => {
@@ -650,11 +693,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       setRow('det-convs', 'det-convs-val', convFiles.length ? convFiles : null, false);
       setCountRow('det-projects', 'det-projects-val', projFiles.length, 'project');
       setCountRow('det-designs', 'det-designs-val', designFiles.length, 'design chat');
+      setSpendRow(spendFile ? spendFile.name : null);
 
       if (usersFile) loadUserFile(usersFile);
       if (convFiles.length) loadConvFiles(convFiles);
       if (projFiles.length) loadProjectFiles(projFiles);
       if (designFiles.length) loadDesignFiles(designFiles);
+      if (spendFile) loadSpendFile(spendFile);
     }
 
     function loadProjectFiles(files) {
@@ -711,6 +756,194 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
     function setDesignRow(count) { setCountRow('det-designs', 'det-designs-val', count, 'design chat'); }
+
+    function setSpendRow(name) {
+      const row = document.getElementById('det-spend');
+      const val = document.getElementById('det-spend-val');
+      if (name) {
+        row.classList.add('found'); row.classList.remove('missing');
+        val.textContent = name;
+      } else {
+        row.classList.add('missing'); row.classList.remove('found');
+        val.textContent = 'Not found (optional)';
+      }
+    }
+
+    // ─── Spend report (admin analytics CSV) ─────────────────────────────────
+    // The Claude admin analytics dashboard exports a per-user, per-model spend
+    // report CSV (Settings → Analytics → Export spend report). Columns are
+    // matched by keyword so header-name changes don't break the import.
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], field = '', inQuotes = false;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += ch;
+        } else if (ch === '"') inQuotes = true;
+        else if (ch === ',') { row.push(field); field = ''; }
+        else if (ch === '\n') {
+          row.push(field); field = '';
+          if (row.some(f => f.trim() !== '')) rows.push(row);
+          row = [];
+        } else if (ch !== '\r') field += ch;
+      }
+      row.push(field);
+      if (row.some(f => f.trim() !== '')) rows.push(row);
+      return rows;
+    }
+
+    function detectSpendColumns(header) {
+      const norm = header.map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const find = pred => norm.findIndex(pred);
+      const cols = {
+        email: find(h => h.includes('email')),
+        uuid: find(h => h.includes('uuid') || (h.includes('account') && h.includes('id'))),
+        product: find(h => h.includes('product')),
+        model: find(h => h.includes('model') && !h.includes('family')),
+        requests: find(h => h.includes('request') || h === 'count'),
+        promptTokens: find(h => (h.includes('prompt') || h.includes('input')) && h.includes('token')),
+        completionTokens: find(h => (h.includes('completion') || h.includes('output')) && h.includes('token')),
+        netSpend: find(h => h.includes('net') && (h.includes('spend') || h.includes('cost') || h.includes('usd'))),
+        grossSpend: find(h => h.includes('gross')),
+        date: find(h => h === 'date' || h === 'day')
+      };
+      // Fall back to any spend/cost column when there's no explicit net column.
+      if (cols.netSpend === -1) cols.netSpend = find(h => h.includes('spend') || h.includes('cost') || h.includes('usd'));
+      return cols;
+    }
+
+    function ingestSpendCSV(text, fileName) {
+      const rows = parseCSV(text);
+      if (rows.length < 2) throw new Error('the CSV has no data rows');
+      const cols = detectSpendColumns(rows[0]);
+      if (cols.email === -1 && cols.uuid === -1) throw new Error('could not find a user email or account UUID column');
+      if (cols.requests === -1 && cols.netSpend === -1) throw new Error('could not find a request-count or spend column');
+      const num = v => { const n = parseFloat(String(v ?? '').replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n; };
+      const cell = (r, i) => i !== -1 ? (r[i] || '').trim() : '';
+      spendRows = rows.slice(1).map(r => ({
+        email: cell(r, cols.email).toLowerCase(),
+        uuid: cell(r, cols.uuid),
+        product: cell(r, cols.product),
+        model: cell(r, cols.model),
+        requests: cols.requests !== -1 ? num(r[cols.requests]) : 0,
+        promptTokens: cols.promptTokens !== -1 ? num(r[cols.promptTokens]) : 0,
+        completionTokens: cols.completionTokens !== -1 ? num(r[cols.completionTokens]) : 0,
+        netSpend: cols.netSpend !== -1 ? num(r[cols.netSpend]) : 0,
+        grossSpend: cols.grossSpend !== -1 ? num(r[cols.grossSpend]) : 0,
+        date: cell(r, cols.date)
+      })).filter(r => r.email || r.uuid);
+      if (!spendRows.length) throw new Error('no rows with a user identity found');
+      spendMeta = { fileName, rowCount: spendRows.length, matchedUsers: null, unmatched: [] };
+    }
+
+    // Join spend rows to loaded users (uuid first, then email) and aggregate.
+    function buildSpendMap() {
+      spendByUser = {};
+      if (!spendRows.length || !Object.keys(userMap).length) { updateSpendStatusUI(); return; }
+      const emailIndex = {};
+      Object.values(userMap).forEach(u => { if (u.email) emailIndex[u.email.toLowerCase()] = u.uuid; });
+      const unmatched = new Set();
+      spendRows.forEach(r => {
+        let key = null;
+        if (r.uuid && userMap[r.uuid]) key = r.uuid;
+        else if (r.email && emailIndex[r.email]) key = emailIndex[r.email];
+        if (!key) unmatched.add(r.email || r.uuid);
+        const target = key || ('unmatched:' + (r.email || r.uuid));
+        if (!spendByUser[target]) spendByUser[target] = {
+          requests: 0, promptTokens: 0, completionTokens: 0,
+          netSpend: 0, grossSpend: 0, models: new Set(), matched: !!key
+        };
+        const s = spendByUser[target];
+        s.requests += r.requests;
+        s.promptTokens += r.promptTokens;
+        s.completionTokens += r.completionTokens;
+        s.netSpend += r.netSpend;
+        s.grossSpend += r.grossSpend;
+        if (r.model) s.models.add(r.model);
+      });
+      spendMeta.matchedUsers = Object.values(spendByUser).filter(s => s.matched).length;
+      spendMeta.unmatched = [...unmatched];
+      updateSpendStatusUI();
+    }
+
+    function loadSpendFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          ingestSpendCSV(ev.target.result, file.name);
+          markSpendLoaded();
+          if (Object.keys(userMap).length) {
+            buildSpendMap();
+            if (viewMode === 'cost') renderCostView();
+          }
+          hideError();
+        } catch (err) {
+          showError('Error parsing spend report: ' + err.message);
+          document.getElementById('spend-status-setup').textContent = 'Error';
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function markSpendLoaded() {
+      document.getElementById('spend-status-setup').textContent =
+        '✓ ' + spendMeta.rowCount.toLocaleString() + ' spend row' + (spendMeta.rowCount !== 1 ? 's' : '');
+      document.getElementById('spend-zone').classList.add('loaded');
+      setSpendRow(spendMeta.fileName);
+      updateSpendStatusUI();
+    }
+
+    function updateSpendStatusUI() {
+      const note = document.getElementById('spend-status');
+      const thLabel = document.getElementById('cost-threshold-label');
+      if (spendMeta) {
+        let txt = '📄 ' + spendMeta.fileName + ' — ' + spendMeta.rowCount.toLocaleString() + ' rows';
+        if (spendMeta.matchedUsers != null) {
+          txt += ', ' + spendMeta.matchedUsers + ' user' + (spendMeta.matchedUsers !== 1 ? 's' : '') + ' matched';
+          if (spendMeta.unmatched.length) txt += ', ' + spendMeta.unmatched.length + ' unmatched';
+        }
+        note.textContent = txt;
+        note.style.display = '';
+        thLabel.textContent = 'Low-usage threshold (requests)';
+      } else {
+        note.style.display = 'none';
+        thLabel.textContent = 'Low-usage threshold (convs)';
+      }
+    }
+
+    function fmtTokens(n) {
+      if (!n) return '0';
+      if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return String(Math.round(n));
+    }
+
+    function copyIdleEmails() {
+      const text = idleEmailsCache.join('; ');
+      const done = () => {
+        const b = document.getElementById('copy-idle-btn');
+        if (b) { b.textContent = '✓ Copied'; setTimeout(() => { b.textContent = 'Copy emails'; }, 1500); }
+      };
+      const fallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) { /* best effort */ }
+        document.body.removeChild(ta);
+        done();
+      };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done).catch(fallback);
+      else fallback();
+    }
 
 
     function buildProjectMap() {
@@ -830,6 +1063,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
       mergeDesignChats();
       reprocessConversations();
+      buildSpendMap();
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('viewer-section').classList.remove('hidden');
       renderTeamOverview();
@@ -1021,11 +1255,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const threshold = parseInt(document.getElementById('cost-threshold').value) || 0;
 
       const users = Object.values(userMap);
-      const activeUsers = users.filter(u => u.count > 0).length;
-      const idleUsers = users.filter(u => u.count === 0).length;
+      // With a spend report loaded, activity means API-reported requests over the
+      // report's period — this matches the admin dashboard's active-seat count.
+      // Otherwise fall back to conversation counts from the export.
+      const hasSpend = spendRows.length > 0;
+      const activityOf = u => hasSpend ? (spendByUser[u.uuid]?.requests || 0) : u.count;
+      const activeUsers = users.filter(u => activityOf(u) > 0).length;
+      const idleUsers = users.filter(u => activityOf(u) === 0).length;
       const idleSeats = Math.max(0, seats - activeUsers);
       const totalConvs = conversationsData.length;
       const totalMsgs = conversationsData.reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
+
+      let spendTotals = null;
+      if (hasSpend) {
+        spendTotals = { net: 0, gross: 0, requests: 0, tokens: 0 };
+        Object.values(spendByUser).forEach(s => {
+          spendTotals.net += s.netSpend;
+          spendTotals.gross += s.grossSpend;
+          spendTotals.requests += s.requests;
+          spendTotals.tokens += s.promptTokens + s.completionTokens;
+        });
+      }
 
       const dates = conversationsData.map(c => new Date(c.created_at)).filter(d => !isNaN(d));
       const spanDays = dates.length
@@ -1066,49 +1316,83 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="stat-card"><div class="stat-label">Period</div>
           <div class="stat-value">${periodMonths.toFixed(1)} mo</div>
           <div class="stat-sub">${Math.round(spanDays)} days of data</div></div>
+        ${hasSpend ? `
+        <div class="stat-card"><div class="stat-label">Reported Spend (net)</div>
+          <div class="stat-value">${fmtUSD(spendTotals.net, 2)}</div>
+          <div class="stat-sub">${spendTotals.gross ? 'gross ' + fmtUSD(spendTotals.gross, 2) + ' · ' : ''}from spend report</div></div>
+        <div class="stat-card"><div class="stat-label">API Requests</div>
+          <div class="stat-value">${spendTotals.requests.toLocaleString()}</div>
+          <div class="stat-sub">from spend report</div></div>
+        <div class="stat-card"><div class="stat-label">Tokens</div>
+          <div class="stat-value">${fmtTokens(spendTotals.tokens)}</div>
+          <div class="stat-sub">prompt + completion</div></div>` : ''}
       `;
 
-      const lowUsers = users.filter(u => u.count > 0 && u.count <= threshold).length;
+      const lowUsers = users.filter(u => activityOf(u) > 0 && activityOf(u) <= threshold).length;
       const reclaimMonthly = idleSpend;
+      const idleSource = hasSpend ? 'no requests in the spend report period' : 'no activity in this export';
+      const activityNoun = hasSpend ? 'request' : 'conversation';
+      const idleList = users.filter(u => activityOf(u) === 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      idleEmailsCache = idleList.map(u => u.email).filter(Boolean);
       document.getElementById('cost-reclaim').innerHTML = `
         <div class="section-header"><h3>Reclaim opportunity</h3></div>
         ${idleSeats > 0
-          ? `<p style="font-size:0.95rem;">Cancelling <strong>${idleSeats}</strong> idle seat${idleSeats !== 1 ? 's' : ''} (no activity in this export) would save
+          ? `<p style="font-size:0.95rem;">Cancelling <strong>${idleSeats}</strong> idle seat${idleSeats !== 1 ? 's' : ''} (${idleSource}) would save
                <strong style="color:#4ade80;">${fmtUSD(reclaimMonthly)}/mo</strong> (${fmtUSD(reclaimMonthly * 12)}/yr).</p>`
           : `<p style="font-size:0.95rem;color:#4ade80;">No idle seats — every licensed seat has activity. 👍</p>`}
+        ${idleList.length ? `
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            ${idleList.map(u => `<span style="font-size:0.78rem;background:#374151;border-radius:12px;padding:3px 10px;">${escapeHtml(u.name)}${u.email && u.email !== u.name ? ` <span style="color:#6b7280;">${escapeHtml(u.email)}</span>` : ''}</span>`).join('')}
+            ${idleEmailsCache.length ? `<button class="secondary" id="copy-idle-btn" onclick="copyIdleEmails()" style="font-size:0.75rem;padding:4px 10px;">Copy emails</button>` : ''}
+          </div>` : ''}
         ${lowUsers > 0
-          ? `<p style="font-size:0.85rem;color:#9ca3af;margin-top:6px;">${lowUsers} active user${lowUsers !== 1 ? 's' : ''} below ${threshold} conversation${threshold !== 1 ? 's' : ''} — review for right-sizing.</p>`
+          ? `<p style="font-size:0.85rem;color:#9ca3af;margin-top:8px;">${lowUsers} active user${lowUsers !== 1 ? 's' : ''} at or below ${threshold} ${activityNoun}${threshold !== 1 ? 's' : ''} — review for right-sizing.</p>`
           : ''}
       `;
 
       const periodSeatCost = perSeat * periodMonths;
-      const sorted = [...users].sort((a, b) => a.count - b.count || a.name.localeCompare(b.name));
+      const sorted = [...users].sort((a, b) =>
+        activityOf(a) - activityOf(b) || a.count - b.count || a.name.localeCompare(b.name));
       document.getElementById('cost-table-note').textContent =
-        `${activeUsers} active · ${idleUsers} idle of ${users.length} users`;
+        `${activeUsers} active · ${idleUsers} idle of ${users.length} users` +
+        (hasSpend ? ' · status from spend report requests' : '');
+      const unmatchedNote = hasSpend && spendMeta?.unmatched?.length
+        ? `<p style="font-size:0.78rem;color:#fde047;margin-top:10px;">⚠ ${spendMeta.unmatched.length} spend-report identit${spendMeta.unmatched.length !== 1 ? 'ies' : 'y'} didn't match a loaded user (deprovisioned accounts?): ${escapeHtml(spendMeta.unmatched.slice(0, 8).join(', '))}${spendMeta.unmatched.length > 8 ? ` and ${spendMeta.unmatched.length - 8} more` : ''}</p>`
+        : '';
       document.getElementById('cost-table').innerHTML = `
         <table class="data-table">
           <thead><tr>
-            <th>User</th><th>Conversations</th><th>Messages</th><th>Seat $/mo</th><th>Cost / conv</th><th>Status</th>
+            <th>User</th><th>Conversations</th><th>Messages</th>${hasSpend
+              ? '<th>Requests</th><th>Tokens</th><th>Net spend</th>'
+              : '<th>Seat $/mo</th><th>Cost / conv</th>'}<th>Status</th>
           </tr></thead>
           <tbody>
             ${sorted.map(u => {
               const msgs = (convByUser[u.uuid] || []).reduce((s, c) => s + (c.chat_messages?.length || 0), 0);
               const cpc = u.count ? periodSeatCost / u.count : 0;
-              const status = u.count === 0 ? 'idle' : (u.count <= threshold ? 'low' : 'good');
+              const sp = spendByUser[u.uuid];
+              const activity = activityOf(u);
+              const status = activity === 0 ? 'idle' : (activity <= threshold ? 'low' : 'good');
               const label = status === 'idle' ? 'Idle' : status === 'low' ? 'Low' : 'Active';
               const clickable = u.count > 0;
+              const midCols = hasSpend
+                ? `<td>${(sp?.requests || 0).toLocaleString()}</td>
+                   <td>${fmtTokens((sp?.promptTokens || 0) + (sp?.completionTokens || 0))}</td>
+                   <td>${sp ? fmtUSD(sp.netSpend, 2) : '—'}</td>`
+                : `<td>${fmtUSD(perSeat)}</td>
+                   <td>${u.count ? fine(cpc) : '—'}</td>`;
               return `<tr class="${clickable ? '' : 'non-clickable'}"${clickable ? ` onclick="selectUser('${u.uuid}')"` : ''}>
                 <td style="font-weight:500;">${escapeHtml(u.name)}</td>
                 <td>${u.count.toLocaleString()}</td>
                 <td>${msgs.toLocaleString()}</td>
-                <td>${fmtUSD(perSeat)}</td>
-                <td>${u.count ? fine(cpc) : '—'}</td>
+                ${midCols}
                 <td><span class="cost-badge ${status}">${label}</span></td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
-      `;
+      ` + unmatchedNote;
     }
 
     function switchTeamPeriod(period) {
@@ -1457,7 +1741,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       projectsData = [];
       projectMap = {};
       designConvs = [];
+      spendRows = [];
+      spendByUser = {};
+      spendMeta = null;
+      idleEmailsCache = [];
+      document.getElementById('spend-zone').classList.remove('loaded');
+      document.getElementById('spend-status-setup').textContent = 'Click or drag & drop — from Analytics → Export spend report';
+      document.getElementById('spend-input').value = '';
+      updateSpendStatusUI();
       setDesignRow(0);
+      setSpendRow(null);
       document.getElementById('viewer-section').classList.add('hidden');
       document.getElementById('user-detail').classList.add('hidden');
       document.getElementById('team-overview').classList.remove('hidden');
