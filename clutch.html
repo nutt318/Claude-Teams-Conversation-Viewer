@@ -58,6 +58,17 @@
     .mf-row.skip { opacity: 0.55; }
     .mf-row a { color: #60a5fa; font-size: 0.75rem; }
     .mf-note { margin-top: 8px; font-size: 0.72rem; color: #9ca3af; }
+    .mem-summary { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 10px 14px; background: #1f2937; border: 1px solid #374151; border-radius: 8px; margin-bottom: 12px; font-size: 0.82rem; color: #9ca3af; }
+    .mem-summary strong { color: #f3f4f6; font-size: 0.95rem; }
+    .mem-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 0.82rem; border-bottom: 1px solid #2b3544; }
+    .mem-file-row:last-child { border-bottom: none; }
+    .mem-path { color: #d1d5db; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+    .mem-date { color: #6b7280; font-size: 0.75rem; flex-shrink: 0; }
+    .mem-veil { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 24px 20px; border: 1px dashed #4b5563; border-radius: 10px; background: rgba(31,41,55,0.6); margin-bottom: 12px; }
+    .mem-veil.revealed { flex-direction: row; justify-content: space-between; text-align: left; padding: 10px 14px; border-style: solid; font-size: 0.82rem; color: #9ca3af; }
+    .mem-veil-title { font-weight: 600; color: #e5e7eb; font-size: 0.95rem; }
+    .mem-veil-sub { font-size: 0.8rem; color: #9ca3af; max-width: 460px; }
+    .mem-content { white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; line-height: 1.5; color: #d1d5db; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 420px; overflow-y: auto; }
     .or-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: #4b5563; font-size: 0.8rem; }
     .or-divider::before, .or-divider::after { content: ""; flex: 1; height: 1px; background: #374151; }
     input[type="text"] { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
@@ -372,9 +383,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
 
         <div class="tabs">
-          <button class="tab-btn active" onclick="switchTab('conversations')">💬 Conversations</button>
-          <button class="tab-btn" onclick="switchTab('usage')">📊 Usage Summary</button>
-          <button class="tab-btn" onclick="switchTab('projects')">📁 Projects</button>
+          <button class="tab-btn active" data-tab="conversations" onclick="switchTab('conversations')">💬 Conversations</button>
+          <button class="tab-btn" data-tab="usage" onclick="switchTab('usage')">📊 Usage Summary</button>
+          <button class="tab-btn" data-tab="projects" onclick="switchTab('projects')">📁 Projects</button>
+          <button class="tab-btn" data-tab="memory" onclick="switchTab('memory')">🧠 Memory</button>
         </div>
 
         <!-- Conversations Tab -->
@@ -412,6 +424,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="tab-projects" class="hidden">
           <div id="user-projects-container"></div>
         </div>
+
+        <!-- Memory Tab -->
+        <div id="tab-memory" class="hidden">
+          <div id="user-memory-container"></div>
+        </div>
       </div>
 
     </div>
@@ -431,6 +448,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let idleEmailsCache = [];
     let manifestData = null;   // parsed export manifest { fileName, createdAt, totalFiles, files[] }
     let loadedArchives = [];   // names of the .zip archives drained this session
+    let memoriesByUser = {};   // normalised memory keyed by account uuid
+    let memoriesMeta = null;   // { users, files }
+    let memoryRevealed = {};   // uuid -> whether the viewer has revealed memory content
     let loadedFiles = [];
     let projectMap = {};
     let userMap = {};
@@ -634,13 +654,59 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
 
-    function setMemoriesRow(count) {
+    function setMemoriesRow(detectedFiles) {
       const row = document.getElementById('det-memories');
-      if (!count) { row.style.display = 'none'; return; }
+      if (!detectedFiles) { row.style.display = 'none'; return; }
       row.style.display = '';
-      row.classList.remove('missing', 'found');
-      document.getElementById('det-memories-val').textContent =
-        count.toLocaleString() + ' file' + (count !== 1 ? 's' : '') + ' (not used by CLUTCH)';
+      row.classList.add('found'); row.classList.remove('missing');
+      const users = memoriesMeta ? memoriesMeta.users : 0;
+      const files = memoriesMeta ? memoriesMeta.files : 0;
+      document.getElementById('det-memories-val').textContent = users
+        ? users.toLocaleString() + ' user' + (users !== 1 ? 's' : '') + ', ' +
+          files.toLocaleString() + ' memory file' + (files !== 1 ? 's' : '')
+        : detectedFiles.toLocaleString() + ' file' + (detectedFiles !== 1 ? 's' : '');
+    }
+
+    // ─── Memories ───────────────────────────────────────────────────────────
+    // Every memory record carries account_uuid, so memories join to users the
+    // same way conversations do. Two shapes exist in the wild: newer exports
+    // ship memories/<account_uuid>.json — one object per user — while older
+    // exports ship a single memories.json array. Both normalise to the same
+    // per-user record.
+
+    function normaliseMemoryEntry(entry) {
+      if (!entry || !entry.account_uuid) return null;
+      const files = Array.isArray(entry.memory_files) ? entry.memory_files.map(f => ({
+        path: (f && f.path) || '(unnamed)',
+        content: (f && f.content) || '',
+        updatedAt: (f && f.updated_at) || ''
+      })) : [];
+      const pm = entry.project_memories;
+      const projectMemories = (pm && typeof pm === 'object' && !Array.isArray(pm))
+        ? Object.keys(pm).map(k => ({ key: k, content: String(pm[k] == null ? '' : pm[k]) }))
+        : [];
+      const dates = files.map(f => f.updatedAt).filter(Boolean).sort();
+      return {
+        accountUuid: entry.account_uuid,
+        conversationsMemory: entry.conversations_memory || '',
+        files,
+        projectMemories,
+        lastUpdated: dates.length ? dates[dates.length - 1] : ''
+      };
+    }
+
+    function ingestMemories(text) {
+      const json = JSON.parse(text);
+      const entries = Array.isArray(json) ? json : [json];
+      entries.forEach(e => {
+        const m = normaliseMemoryEntry(e);
+        if (m) memoriesByUser[m.accountUuid] = m;
+      });
+    }
+
+    function toggleMemoryReveal(uuid) {
+      memoryRevealed[uuid] = !memoryRevealed[uuid];
+      renderUserMemory();
     }
 
     // Entry point for every bulk-load gesture: the .zip picker, the folder
@@ -710,7 +776,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       setDetectedRow('det-convs', 'det-convs-val', c.convs.map(s => s.name), false);
       setCountRow('det-projects', 'det-projects-val', c.projects.length, 'project');
       setCountRow('det-designs', 'det-designs-val', c.designs.length, 'design chat');
-      setMemoriesRow(c.memories.length);
 
       for (const src of c.manifests) {
         try { ingestManifest(await src.readText(), src.name); }
@@ -758,6 +823,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('design-zone').classList.add('loaded');
         setDesignRow(n);
       }
+
+      if (c.memories.length) {
+        memoriesByUser = {};
+        for (const src of c.memories) {
+          try { ingestMemories(await src.readText()); }
+          catch (e) { /* skip unreadable memory file */ }
+        }
+        const users = Object.keys(memoriesByUser).length;
+        memoriesMeta = {
+          users,
+          files: Object.values(memoriesByUser).reduce((s, m) => s + m.files.length, 0)
+        };
+      }
+      setMemoriesRow(c.memories.length);
 
       if (c.csvs.length) {
         const csvs = [];
@@ -812,7 +891,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // link is single-use anyway. The links are rendered for the admin to click
     // in their own authenticated session.
 
-    const MANIFEST_UNUSED_CATEGORIES = ['memories'];
+    // Categories CLUTCH ships no reader for. Empty today — every category in
+    // the current export is consumed — but kept as the hook for whatever
+    // Anthropic adds next, so an unknown archive reads "not used" rather than
+    // being reported as missing forever.
+    const MANIFEST_UNUSED_CATEGORIES = [];
 
     function looksLikeManifest(json) {
       return !!json && Array.isArray(json.data_files) && json.data_files.some(f => f && f.export_url);
@@ -1421,6 +1504,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const designCount = designConvsList.length;
       const designUsers = new Set(designConvsList.map(c => c.account?.uuid).filter(Boolean)).size;
       const projCount = Object.keys(projectMap).length;
+      const memUsers = Object.keys(memoriesByUser).length;
+      const memFiles = Object.values(memoriesByUser).reduce((s, m) => s + m.files.length, 0);
       const viewHint = '<span style="font-size:0.7rem;color:#60a5fa;">↓ view</span>';
 
       // Engagement extras for the second card row.
@@ -1461,6 +1546,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="stat-label">\ud83c\udfa8 Design Chats${designCount ? ' ' + viewHint : ''}</div>
           <div class="stat-value">${designCount || '\u2014'}</div>
           <div class="stat-sub">${designCount ? 'by ' + designUsers + ' user' + (designUsers !== 1 ? 's' : '') : 'None in this export'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">🧠 Memory</div>
+          <div class="stat-value">${memUsers || '—'}</div>
+          <div class="stat-sub">${memUsers ? memFiles.toLocaleString() + ' files across ' + memUsers + ' user' + (memUsers !== 1 ? 's' : '') : 'No memories loaded'}</div>
         </div>
         <div class="stat-card${topUser ? ' clickable-card' : ''}"${topUser ? ` onclick="selectUser('${topUser.uuid}')" title="Open this user"` : ''}>
           <div class="stat-label">Most Active User${topUser ? ' ' + viewHint : ''}</div>
@@ -1896,20 +1986,93 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       switchView(viewMode);
     }
 
+    const USER_TABS = ['conversations', 'usage', 'projects', 'memory'];
+
     function switchTab(tab) {
       activeTab = tab;
-      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-        btn.classList.toggle('active',
-          (i === 0 && tab === 'conversations') ||
-          (i === 1 && tab === 'usage') ||
-          (i === 2 && tab === 'projects'));
+      // Keyed off data-tab rather than button index so adding a tab can't
+      // silently shift the active-state mapping.
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
       });
-      document.getElementById('tab-conversations').classList.toggle('hidden', tab !== 'conversations');
-      document.getElementById('tab-usage').classList.toggle('hidden', tab !== 'usage');
-      document.getElementById('tab-projects').classList.toggle('hidden', tab !== 'projects');
+      USER_TABS.forEach(t => document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab));
       if (tab === 'conversations') renderConversations();
       if (tab === 'usage') renderUserUsage();
       if (tab === 'projects') renderUserProjects();
+      if (tab === 'memory') renderUserMemory();
+    }
+
+    // Memory holds personal context — profiles, preferences, working history —
+    // so counts and dates render by default but the content itself sits behind
+    // an explicit per-user reveal. Reading a colleague's profile should be a
+    // deliberate act, not something the dashboard does on its own.
+    function renderUserMemory() {
+      const container = document.getElementById('user-memory-container');
+      const m = memoriesByUser[selectedUserId];
+      if (!m) {
+        container.innerHTML = memoriesMeta
+          ? '<div class="no-data">No memory recorded for this user</div>'
+          : '<div class="no-data">No memories loaded — include <code>memories-000.zip</code> ' +
+            '(or <code>memories.json</code>) when you select your export</div>';
+        return;
+      }
+
+      const last = m.lastUpdated ? new Date(m.lastUpdated) : null;
+      const summary =
+        '<div class="mem-summary">' +
+          '<span><strong>' + m.files.length + '</strong> memory file' + (m.files.length !== 1 ? 's' : '') + '</span>' +
+          '<span><strong>' + m.projectMemories.length + '</strong> project memor' + (m.projectMemories.length !== 1 ? 'ies' : 'y') + '</span>' +
+          (m.conversationsMemory
+            ? '<span><strong>' + m.conversationsMemory.length.toLocaleString() + '</strong> chars of profile memory</span>'
+            : '') +
+          '<span>Last updated ' + (last && !isNaN(last) ? last.toLocaleDateString() : '—') + '</span>' +
+        '</div>';
+
+      if (!memoryRevealed[selectedUserId]) {
+        const fileList = m.files.length
+          ? '<div class="card" style="margin-bottom:12px;">' +
+            '<h3 style="font-size:0.95rem;margin-bottom:8px;">Memory files</h3>' +
+            m.files.map(f =>
+              '<div class="mem-file-row"><span class="mem-path">' + escapeHtml(f.path) + '</span>' +
+              '<span class="mem-date">' +
+              escapeHtml(f.updatedAt && !isNaN(new Date(f.updatedAt)) ? new Date(f.updatedAt).toLocaleDateString() : '—') +
+              '</span></div>').join('') + '</div>'
+          : '';
+        container.innerHTML = summary + fileList +
+          '<div class="mem-veil">' +
+            '<div class="mem-veil-title">🔒 Memory content is hidden</div>' +
+            '<div class="mem-veil-sub">Memory holds personal context about this person — profile, preferences, and working history.</div>' +
+            '<button class="secondary" onclick="toggleMemoryReveal(\'' + escapeHtml(selectedUserId) + '\')">Show memory content</button>' +
+          '</div>';
+        return;
+      }
+
+      const blocks = [];
+      if (m.conversationsMemory) {
+        blocks.push('<div class="card" style="margin-bottom:12px;">' +
+          '<h3 style="font-size:0.95rem;margin-bottom:8px;">Profile memory</h3>' +
+          '<pre class="mem-content">' + escapeHtml(m.conversationsMemory) + '</pre></div>');
+      }
+      m.files.forEach(f => {
+        const when = f.updatedAt && !isNaN(new Date(f.updatedAt)) ? new Date(f.updatedAt).toLocaleString() : '—';
+        blocks.push('<div class="card" style="margin-bottom:12px;">' +
+          '<h3 style="font-size:0.9rem;margin-bottom:4px;">' + escapeHtml(f.path) + '</h3>' +
+          '<div style="font-size:0.72rem;color:#6b7280;margin-bottom:8px;">updated ' + escapeHtml(when) + '</div>' +
+          '<pre class="mem-content">' + escapeHtml(f.content) + '</pre></div>');
+      });
+      m.projectMemories.forEach(p => {
+        const proj = projectMap[p.key];
+        blocks.push('<div class="card" style="margin-bottom:12px;">' +
+          '<h3 style="font-size:0.9rem;margin-bottom:8px;">Project memory — ' +
+          escapeHtml(proj && proj.name ? proj.name : p.key) + '</h3>' +
+          '<pre class="mem-content">' + escapeHtml(p.content) + '</pre></div>');
+      });
+
+      container.innerHTML = summary +
+        '<div class="mem-veil revealed">' +
+          '<span>Memory content is visible.</span>' +
+          '<button class="secondary" onclick="toggleMemoryReveal(\'' + escapeHtml(selectedUserId) + '\')">Hide memory content</button>' +
+        '</div>' + blocks.join('');
     }
 
     function renderConversations() {
@@ -2153,6 +2316,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       designConvs = [];
       manifestData = null;
       loadedArchives = [];
+      memoriesByUser = {};
+      memoriesMeta = null;
+      memoryRevealed = {};
       spendRows = [];
       spendByUser = {};
       spendMeta = null;

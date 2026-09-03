@@ -20,6 +20,7 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 - **Spend report import** — Load the per-user spend report CSV from the Claude admin analytics dashboard (Settings → Analytics → Export spend report) to enrich the Cost & Value view with API-reported requests, tokens, and net/gross spend per user. Idle-seat detection then uses the dashboard's own activity data, and the reclaim card lists the exact idle users with a one-click **Copy emails** button
 - **Members analytics import** — Load the members analytics CSV (`members-analytics-*.csv`) from the admin dashboard to see activity across *all* surfaces: chats, Claude Code sessions, cowork, file edits, PRs, and artifacts. Idle detection switches to the dashboard's own days-active figure — so heavy Claude Code users with zero chats aren't wrongly flagged as idle — plus seat tiers (Premium/Standard) with tier-aware idle-spend math, last-active dates, and owner-seat flagging in the reclaim list
 - **Multi-archive, folder & .zip picker** — Current exports arrive as several separate `.zip` archives; select them all at once, drag them in together, or point CLUTCH at the folder holding them and it merges the lot. Older single-zip and loose-folder exports still work exactly as before, and you can always pick each file type individually
+- **Memories** — Loads the per-user memory records from the export and joins them to users by account UUID. The team dashboard shows memory adoption, and each user gains a **Memory** tab listing their memory files, project memories, and last-updated dates. Memory *content* stays hidden behind an explicit reveal — see [Memory and privacy](#memory-and-privacy)
 - **Export manifest checklist** — Drop in the `manifest-*.json` from a new-format export and CLUTCH shows which archives are loaded, which are still missing (with their download links), and whether any multi-part archive is incomplete
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
@@ -35,6 +36,7 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
   - **Conversations** — conversation data with user UUID references (`conversations.json`)
   - **Projects** *(optional)* — project data associated with your organisation
   - **Design chats** *(optional)* — design chat data
+  - **Memories** *(optional)* — per-user memory records
 
 ## Installation
 
@@ -55,7 +57,7 @@ That's it — no server, no dependencies, no installation required.
    | `conversations-000.zip` | `conversations.json` | yes |
    | `projects-000.zip` | `projects/*.json` | yes |
    | `design_chats-000.zip` | `design_chats/*.json` | yes |
-   | `memories-000.zip` | `memories/*.json` | no — ignored |
+   | `memories-000.zip` | `memories/*.json` | yes |
 
    **Each download link works only once.** Download all of them into a single folder before loading. A large organisation may see an archive split into numbered parts (`conversations-000.zip`, `conversations-001.zip`, …) — download every part.
 4. In CLUTCH, select all the `.zip` files at once, drag them onto the export zone together, or click **"Open folder"** and point it at the folder containing them. There's no need to unzip anything.
@@ -88,7 +90,8 @@ Once both files are loaded, click the button to process the data.
 ### Step 3: Browse Conversations
 
 - Click any user in the left sidebar to view their conversations
-- Switch between **Conversations** and **Usage Summary** tabs to see activity trends
+- Switch between **Conversations**, **Usage Summary**, **Projects**, and **Memory** tabs
+- The **Memory** tab shows memory file counts and dates; content is revealed only on request
 - Use the search box to filter conversations
 - Click a conversation to expand and read the messages
 - Use "Export CSV" to download the selected user's conversation list
@@ -172,6 +175,16 @@ The tool links conversations to users via the `account.uuid` field (or similar).
 - **All processing is local** — Your data never leaves your computer
 - **No external requests** — The tool works completely offline
 - **No data storage** — Nothing is saved; refresh the page to clear everything
+
+### Memory and privacy
+
+The export includes each user's Claude memory — profile, preferences, and working context written in the first person about that individual. It is materially more personal than usage counts, so CLUTCH treats it differently from every other data type:
+
+- Counts, file paths, and last-updated dates render normally — memory as an adoption signal
+- Memory **content** is hidden by default behind a per-user **Show memory content** control, so reading a colleague's profile is always a deliberate act rather than something the dashboard does on its own
+- The reveal is per user and resets on **Start Over**; nothing is remembered between sessions
+
+Nothing here is exposed that an organisation admin could not already read in the raw export. The gate exists so a dashboard left open on a shared screen does not display a colleague's personal profile by default.
 
 ### Why CLUTCH doesn't download the archives for you
 
