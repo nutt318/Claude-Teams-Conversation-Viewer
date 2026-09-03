@@ -19,7 +19,8 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 - **Cost & value analysis** — Enter your plan/seat cost and CLUTCH breaks down monthly/annual spend, license utilization, idle-seat waste, cost per active user / conversation / message, a reclaim recommendation, and a per-user value table flagging idle and low-usage seats
 - **Spend report import** — Load the per-user spend report CSV from the Claude admin analytics dashboard (Settings → Analytics → Export spend report) to enrich the Cost & Value view with API-reported requests, tokens, and net/gross spend per user. Idle-seat detection then uses the dashboard's own activity data, and the reclaim card lists the exact idle users with a one-click **Copy emails** button
 - **Members analytics import** — Load the members analytics CSV (`members-analytics-*.csv`) from the admin dashboard to see activity across *all* surfaces: chats, Claude Code sessions, cowork, file edits, PRs, and artifacts. Idle detection switches to the dashboard's own days-active figure — so heavy Claude Code users with zero chats aren't wrongly flagged as idle — plus seat tiers (Premium/Standard) with tier-aware idle-spend math, last-active dates, and owner-seat flagging in the reclaim list
-- **Folder & .zip picker** — Select your entire export folder or zip and CLUTCH auto-detects the right files; or pick each file type individually
+- **Multi-archive, folder & .zip picker** — Current exports arrive as several separate `.zip` archives; select them all at once, drag them in together, or point CLUTCH at the folder holding them and it merges the lot. Older single-zip and loose-folder exports still work exactly as before, and you can always pick each file type individually
+- **Export manifest checklist** — Drop in the `manifest-*.json` from a new-format export and CLUTCH shows which archives are loaded, which are still missing (with their download links), and whether any multi-part archive is incomplete
 - **Load multiple conversation files** — Combine exports from different time periods
 - **Search** — Find specific conversations or content within a user's history
 - **Export to CSV** — Download a user's conversation summary as a spreadsheet
@@ -29,10 +30,11 @@ CLUTCH allows Claude Teams administrators to merge user data with conversation e
 
 - A modern web browser (Chrome, Firefox, Edge, Safari)
 - **Organisation admin access** — Only the original org admin can export data from Claude Teams. You must be the admin of the Claude Teams organisation to generate the export files used by this tool.
-- JSON files from your Claude Teams export:
-  - **Users file** — Contains user UUIDs and names
-  - **Conversations file(s)** — Contains conversation data with user UUID references
-  - **Projects file** *(optional)* — Contains project data associated with your organisation
+- The archives from your Claude Teams export (see [Getting Your Export Files](#getting-your-export-files)). Whether they arrive as several `.zip` files, one `.zip`, or a folder of loose JSON, CLUTCH needs:
+  - **Users** — user UUIDs and names (`users.json`, shipped inside `light_metadata-000.zip`)
+  - **Conversations** — conversation data with user UUID references (`conversations.json`)
+  - **Projects** *(optional)* — project data associated with your organisation
+  - **Design chats** *(optional)* — design chat data
 
 ## Installation
 
@@ -45,12 +47,34 @@ That's it — no server, no dependencies, no installation required.
 
 1. Log in to [claude.ai](https://claude.ai) as an **organisation admin**
 2. Navigate to **Settings → Organisation → Export data**
-3. Download and extract the export — you'll get a folder containing JSON files including `users.json`, `conversations.json`, and `projects.json`
-4. In CLUTCH, click **"Select Export Folder"** and point it at the extracted folder — files are auto-detected automatically
+3. You'll receive a `manifest-<org>-<timestamp>.json` file listing several separate archives, each with its own download link:
+
+   | Archive | Contents | Used by CLUTCH |
+   | ------- | -------- | -------------- |
+   | `light_metadata-000.zip` | `users.json` | yes |
+   | `conversations-000.zip` | `conversations.json` | yes |
+   | `projects-000.zip` | `projects/*.json` | yes |
+   | `design_chats-000.zip` | `design_chats/*.json` | yes |
+   | `memories-000.zip` | `memories/*.json` | no — ignored |
+
+   **Each download link works only once.** Download all of them into a single folder before loading. A large organisation may see an archive split into numbered parts (`conversations-000.zip`, `conversations-001.zip`, …) — download every part.
+4. In CLUTCH, select all the `.zip` files at once, drag them onto the export zone together, or click **"Open folder"** and point it at the folder containing them. There's no need to unzip anything.
+
+Older exports that produced a single zip, or a folder of loose JSON files, still load exactly as before.
 
 ## Usage
 
 ### Step 1: Load Your Files
+
+The fastest route is to load the whole export in one action:
+
+- **Open .zips** — select every archive from your export at once
+- **Open folder** — point CLUTCH at the folder holding the archives; any loose JSON or analytics CSV sitting alongside them is picked up in the same pass
+- **Drag & drop** — drop all the archives onto the export zone together
+
+CLUTCH merges the archives, detects which file is which, and lists what it found. If the export's `manifest-*.json` is included, a checklist appears showing any archive still missing.
+
+Or pick each file type individually:
 
 - **Users JSON** — Drag & drop or click to upload your users file
 - **Conversations JSON** — Drag & drop or click to upload one or more conversation files
@@ -149,6 +173,17 @@ The tool links conversations to users via the `account.uuid` field (or similar).
 - **No external requests** — The tool works completely offline
 - **No data storage** — Nothing is saved; refresh the page to clear everything
 
+### Why CLUTCH doesn't download the archives for you
+
+Given the manifest contains a download link for every archive, it's a fair question. CLUTCH deliberately doesn't, and can't:
+
+- **The browser blocks it.** The export endpoint returns no `Access-Control-Allow-Origin` header and sets `Cross-Origin-Resource-Policy: same-origin`. CLUTCH runs from a `file://` URL, so its origin is `null` and the browser refuses to hand the response to the page. No amount of client-side code changes this.
+- **Cloudflare blocks non-browser clients.** Requests outside an authenticated browser session are met with a bot challenge.
+- **Each link is single-use.** Even a working fetch would succeed only on the very first attempt after an export.
+- **It would end the offline guarantee.** Reaching out to the network is precisely what this tool is built not to do.
+
+So the manifest is treated as metadata only — a checklist of what your export contained, with the links rendered for you to click in your own browser session.
+
 ## Troubleshooting
 
 ### "Could not auto-detect field mappings"
@@ -161,7 +196,15 @@ The UUID field in your conversations may not match the UUID field in your users 
 
 ### Large files loading slowly
 
-The tool handles large files but limits the display to 100 conversations at a time for performance. Use the search feature to find specific conversations.
+The tool handles large files but limits the display to 100 conversations at a time for performance. Use the search feature to find specific conversations. Archives are read one at a time rather than in parallel — `conversations.json` runs to hundreds of megabytes uncompressed, so this keeps memory in check at the cost of a slightly longer load.
+
+### Something's missing after loading the archives
+
+Include the export's `manifest-*.json` in your selection. The checklist that appears will name exactly which archive is absent. Bear in mind each download link works only once — if one was already used, re-export from **Settings → Organisation → Export data** to get a fresh set of links.
+
+### A download link gives an error
+
+The links are single-use and expire. Re-export to generate a new manifest.
 
 ## License
 

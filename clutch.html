@@ -27,6 +27,8 @@
     .folder-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 20px; border: 2px dashed #3b82f6; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: rgba(59,130,246,0.05); margin-bottom: 16px; text-align: center; }
     .folder-zone:hover { background: rgba(59,130,246,0.12); border-color: #60a5fa; }
     .folder-zone.loaded { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+    .folder-zone.dragover { background: rgba(59,130,246,0.18); border-color: #60a5fa; }
+    .folder-hint { font-size: 0.72rem; color: #4b5563; max-width: 380px; margin-top: 4px; }
     .folder-icon { font-size: 2rem; margin-bottom: 6px; }
     .folder-label { font-size: 1rem; font-weight: 600; color: #e5e7eb; margin-bottom: 4px; }
     .folder-sub { font-size: 0.8rem; color: #6b7280; max-width: 380px; }
@@ -45,6 +47,17 @@
     .det-icon { width: 22px; }
     .det-label { flex: 1; color: #9ca3af; }
     .det-val { font-weight: 500; color: #f3f4f6; font-size: 0.8rem; }
+    #manifest-check { margin-top: 12px; padding: 12px 14px; background: #1f2937; border: 1px solid #374151; border-radius: 8px; }
+    .mf-head { font-size: 0.85rem; font-weight: 600; color: #e5e7eb; margin-bottom: 8px; }
+    .mf-row { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; padding: 4px 0; }
+    .mf-mark { width: 16px; text-align: center; }
+    .mf-cat { flex: 1; color: #d1d5db; }
+    .mf-parts { color: #9ca3af; font-size: 0.75rem; }
+    .mf-row.ok .mf-mark { color: #22c55e; }
+    .mf-row.gone .mf-mark { color: #f87171; }
+    .mf-row.skip { opacity: 0.55; }
+    .mf-row a { color: #60a5fa; font-size: 0.75rem; }
+    .mf-note { margin-top: 8px; font-size: 0.72rem; color: #9ca3af; }
     .or-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: #4b5563; font-size: 0.8rem; }
     .or-divider::before, .or-divider::after { content: ""; flex: 1; height: 1px; background: #374151; }
     input[type="text"] { width: 100%; background: #374151; border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; color: #f3f4f6; font-size: 0.875rem; }
@@ -151,15 +164,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <h2>Load Data Files</h2>
 
         <!-- Load options (primary) -->
-        <div class="folder-zone" id="folder-zone" onclick="document.getElementById('zip-input').click()">
+        <div class="folder-zone" id="folder-zone" onclick="document.getElementById('zip-input').click()"
+             ondrop="handleDrop(event, 'export')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
           <div class="folder-icon">📁</div>
-          <div class="folder-label">Select Export .zip or Folder</div>
-          <div class="folder-sub" id="folder-status">Click to select your .zip export file — or use the folder picker below</div>
+          <div class="folder-label">Select Export Archives or Folder</div>
+          <div class="folder-sub" id="folder-status">Select all the .zip files from your export (or the folder containing them) — files are detected automatically</div>
+          <div class="folder-hint">New exports produce several .zip files plus a manifest — select them all at once.</div>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-            <label onclick="event.stopPropagation();document.getElementById('zip-input').click()" style="background:#3b82f6;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:500;">Open .zip</label>
+            <label onclick="event.stopPropagation();document.getElementById('zip-input').click()" style="background:#3b82f6;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:500;">Open .zips</label>
             <label onclick="event.stopPropagation();document.getElementById('folder-input').click()" style="background:#374151;color:#d1d5db;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:500;">Open folder</label>
           </div>
-          <input type="file" id="zip-input" accept=".zip" style="display:none;">
+          <input type="file" id="zip-input" accept=".zip" multiple style="display:none;">
           <input type="file" id="folder-input" webkitdirectory multiple style="display:none;">
         </div>
 
@@ -177,7 +192,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="detected-row" id="det-designs">
             <span class="det-icon">🎨</span><span class="det-label">Design chats</span><span class="det-val" id="det-designs-val">—</span>
           </div>
+          <div class="detected-row" id="det-memories" style="display:none;">
+            <span class="det-icon">🧠</span><span class="det-label">Memories</span><span class="det-val" id="det-memories-val">—</span>
+          </div>
         </div>
+
+        <!-- Export manifest completeness checklist -->
+        <div id="manifest-check" class="hidden"></div>
 
         <!-- Or pick individually -->
         <div class="or-divider"><span>or pick files individually</span></div>
@@ -408,6 +429,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let membersByUser = {}; // per-user dashboard stats keyed by user uuid (or unmatched:email)
     let membersMeta = null; // { fileName, rowCount, matchedUsers, unmatched }
     let idleEmailsCache = [];
+    let manifestData = null;   // parsed export manifest { fileName, createdAt, totalFiles, files[] }
+    let loadedArchives = [];   // names of the .zip archives drained this session
     let loadedFiles = [];
     let projectMap = {};
     let userMap = {};
@@ -429,8 +452,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('cost-spend-input').addEventListener('change', e => { loadSpendFile(e.target.files[0]); e.target.value = ''; });
     document.getElementById('cost-members-input').addEventListener('change', e => { loadMembersFile(e.target.files[0]); e.target.value = ''; });
     document.getElementById('members-input').addEventListener('change', e => loadMembersFile(e.target.files[0]));
-    document.getElementById('folder-input').addEventListener('change', e => handleFolderSelect(Array.from(e.target.files)));
-    document.getElementById('zip-input').addEventListener('change', e => handleZipSelect(e.target.files[0]));
+    document.getElementById('folder-input').addEventListener('change', e => handleExportSelect(Array.from(e.target.files)));
+    document.getElementById('zip-input').addEventListener('change', e => handleExportSelect(Array.from(e.target.files)));
     document.getElementById('user-search').addEventListener('input', e => renderUserLeaderboard(e.target.value));
 
     function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
@@ -439,6 +462,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       e.preventDefault();
       e.currentTarget.classList.remove('dragover');
       const all = Array.from(e.dataTransfer.files);
+      // Dropping onto the main export zone accepts whole archives, loose JSON,
+      // and analytics CSVs together — the same pool the pickers build.
+      // Note: dataTransfer.files never contains directory contents, so a
+      // dropped *folder* yields nothing; the folder picker handles that case.
+      if (type === 'export') {
+        if (all.length) handleExportSelect(all);
+        return;
+      }
       if (type === 'members') {
         const csv = all.find(f => f.name.toLowerCase().endsWith('.csv'));
         if (csv) loadMembersFile(csv);
@@ -530,200 +561,325 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       e.target.value = '';
     });
 
-    function handleZipSelect(file) {
-      if (!file) return;
-      document.getElementById('folder-zone').classList.add('loaded');
-      document.getElementById('folder-status').textContent = 'Reading ' + file.name + '...';
-      document.getElementById('detected-files').classList.remove('hidden');
+    // ─── Unified export loading pipeline ────────────────────────────────────
+    // Zip entries and loose files both normalise to a source descriptor:
+    //   { name, path, archive?, readText() }
+    // Everything the user selects — one archive, five archives, a folder, a
+    // drag-and-drop — is pooled into an array of these, classified once, then
+    // loaded once. Loading once is what keeps the per-type loaders idempotent:
+    // they reset-then-populate, so re-selecting the same export replaces the
+    // data rather than doubling every count.
 
-      JSZip.loadAsync(file).then(zip => {
-        const jsonEntries = Object.values(zip.files).filter(f =>
-          !f.dir && f.name.toLowerCase().endsWith('.json') && !f.name.includes('__MACOSX')
-        );
-        const csvEntries = Object.values(zip.files).filter(f =>
-          !f.dir && f.name.toLowerCase().endsWith('.csv') && !f.name.includes('__MACOSX')
-        );
-
-        if (!jsonEntries.length) {
-          showError('No JSON files found in the zip.');
-          document.getElementById('folder-status').textContent = 'No JSON files found';
-          return;
-        }
-
-        document.getElementById('folder-status').textContent =
-          file.name + ' (' + jsonEntries.length + ' JSON file' + (jsonEntries.length !== 1 ? 's' : '') + ')';
-
-        // Projects and design chats are folders of UUID-named files in newer
-        // exports (older exports used a flat projects.json). Match the folder
-        // by exact path segment so a user's export-folder name that merely
-        // contains "project"/"design" can't misclassify everything.
-        let usersEntry = null, convEntries = [], projEntries = [], designEntries = [];
-        jsonEntries.forEach(entry => {
-          const segs = entry.name.toLowerCase().split('/');
-          const name = segs[segs.length - 1];
-          if (segs.includes('design_chats') || name.includes('design_chat')) designEntries.push(entry);
-          else if (segs.includes('projects') || name.includes('project')) projEntries.push(entry);
-          else if (name.includes('user')) usersEntry = entry;
-          else if (name.includes('conversation')) convEntries.push(entry);
-        });
-
-        const setRow = (rowId, valId, entry, optional) => {
-          const row = document.getElementById(rowId);
-          if (entry) {
-            row.classList.add('found'); row.classList.remove('missing');
-            const names = Array.isArray(entry) ? entry.map(e => e.name.split('/').pop()).join(', ') : entry.name.split('/').pop();
-            document.getElementById(valId).textContent = names;
-          } else {
-            row.classList.add('missing');
-            document.getElementById(valId).textContent = optional ? 'Not found (optional)' : 'Not found';
-          }
-        };
-        setRow('det-users', 'det-users-val', usersEntry, false);
-        setRow('det-convs', 'det-convs-val', convEntries.length ? convEntries : null, false);
-        setCountRow('det-projects', 'det-projects-val', projEntries.length, 'project');
-        setCountRow('det-designs', 'det-designs-val', designEntries.length, 'design chat');
-
-        // Extract and load each file
-        const readEntry = entry =>
-          entry.async('string').then(text => ({
-            name: entry.name.split('/').pop(),
-            text
-          }));
-
-        const promises = [];
-        if (usersEntry) promises.push(readEntry(usersEntry).then(({text}) => {
-          try {
-            const json = JSON.parse(text);
-            usersData = Array.isArray(json) ? json : [json];
-            document.getElementById('user-status').textContent = '\u2713 ' + usersData.length.toLocaleString() + ' users';
-            document.getElementById('user-zone').classList.add('loaded');
-            autoDetectUserFields();
-          } catch(e) { showError('Error parsing users: ' + e.message); }
-        }));
-
-        if (convEntries.length) promises.push(
-          Promise.all(convEntries.map(readEntry)).then(results => {
-            conversationsData = [];
-            loadedFiles = [];
-            results.forEach(({name, text}) => {
-              try {
-                const json = JSON.parse(text);
-                const data = Array.isArray(json) ? json : [json];
-                conversationsData = conversationsData.concat(data);
-                loadedFiles.push({ name, count: data.length });
-              } catch(e) { showError('Error parsing ' + name + ': ' + e.message); }
-            });
-            document.getElementById('conv-status').textContent =
-              '\u2713 ' + conversationsData.length.toLocaleString() + ' conversations';
-            document.getElementById('conv-zone').classList.add('loaded');
-            autoDetectConvField();
-          })
-        );
-
-        if (projEntries.length) promises.push(
-          Promise.all(projEntries.map(readEntry)).then(results => {
-            projectsData = [];
-            results.forEach(({text}) => {
-              try {
-                const j = JSON.parse(text);
-                if (Array.isArray(j)) projectsData = projectsData.concat(j);
-                else projectsData.push(j);
-              } catch(e) { /* skip unreadable project file */ }
-            });
-            document.getElementById('proj-status').textContent = '\u2713 ' + projectsData.length.toLocaleString() + ' projects';
-            document.getElementById('proj-zone').classList.add('loaded');
-            buildProjectMap();
-          })
-        );
-
-        if (csvEntries.length) promises.push(
-          Promise.all(csvEntries.map(f =>
-            f.async('string').then(text => ({ name: f.name.split('/').pop(), text }))
-          )).then(csvs => {
-            csvs.forEach(c => { c.kind = classifyCsvName(c.name) || classifyCsvHeader(c.text); });
-            const members = csvs.find(c => c.kind === 'members');
-            const spend = csvs.find(c => c.kind === 'spend') ||
-              (csvs.length === 1 && !csvs[0].kind ? csvs[0] : null);
-            if (members) {
-              try { ingestClassifiedCsv(members.text, members.name, 'members'); }
-              catch(e) { showError('Error parsing members analytics: ' + e.message); }
-            }
-            if (spend) {
-              try { ingestClassifiedCsv(spend.text, spend.name, 'spend'); }
-              catch(e) { showError('Error parsing spend report: ' + e.message); }
-            }
-          })
-        );
-
-        if (designEntries.length) promises.push(
-          Promise.all(designEntries.map(readEntry)).then(results => {
-            designConvs = [];
-            results.forEach(({name, text}) => {
-              try { ingestDesignChat(text); }
-              catch(e) { /* skip unreadable design chat */ }
-            });
-            const n = designConvs.length;
-            document.getElementById('design-status').textContent = '✓ ' + n.toLocaleString() + ' design chat' + (n !== 1 ? 's' : '');
-            document.getElementById('design-zone').classList.add('loaded');
-            setDesignRow(n);
-          })
-        );
-
-        Promise.all(promises).then(() => {
-          hideError();
-          checkBothLoaded();
-        });
-      }).catch(err => {
-        showError('Error reading zip: ' + err.message);
-        document.getElementById('folder-status').textContent = 'Error reading zip';
+    function readFileText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = ev => resolve(ev.target.result);
+        reader.onerror = () => reject(new Error('could not read ' + file.name));
+        reader.readAsText(file);
       });
     }
 
-    function handleFolderSelect(files) {
-      const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.json'));
-      const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
-      const membersFile = csvFiles.find(f => classifyCsvName(f.name) === 'members');
-      const spendFile = csvFiles.find(f => classifyCsvName(f.name) === 'spend');
-      const unknownCsv = (!membersFile && !spendFile && csvFiles.length === 1) ? csvFiles[0] : null;
-      if (!jsonFiles.length && !spendFile && !membersFile && !unknownCsv) { showError('No JSON files found in the selected folder.'); return; }
+    function sourceFromFile(file) {
+      return {
+        name: file.name,
+        path: file.webkitRelativePath || file.name,
+        readText: () => readFileText(file)
+      };
+    }
 
-      let usersFile = null, convFiles = [], projFiles = [], designFiles = [];
-      jsonFiles.forEach(f => {
-        const segs = (f.webkitRelativePath || f.name).toLowerCase().split('/');
-        const name = f.name.toLowerCase();
-        if (segs.includes('design_chats') || name.includes('design_chat')) designFiles.push(f);
-        else if (segs.includes('projects') || name.includes('project')) projFiles.push(f);
-        else if (name.includes('user')) usersFile = f;
-        else if (name.includes('conversation')) convFiles.push(f);
+    function sourceFromZipEntry(entry, archiveName) {
+      return {
+        name: entry.name.split('/').pop(),
+        path: entry.name,
+        archive: archiveName,
+        readText: () => entry.async('string')
+      };
+    }
+
+    // Projects and design chats are folders of UUID-named files in newer
+    // exports (older exports used a flat projects.json). Match the folder by
+    // exact path segment so a user's export-folder name that merely contains
+    // "project"/"design" can't misclassify everything.
+    function classifySources(sources) {
+      const out = { users: null, convs: [], projects: [], designs: [], csvs: [], manifests: [], memories: [] };
+      sources.forEach(src => {
+        const lower = src.path.toLowerCase();
+        const name = src.name.toLowerCase();
+        if (lower.endsWith('.csv')) { out.csvs.push(src); return; }
+        if (!lower.endsWith('.json')) return;
+        const segs = lower.split('/');
+        // Memories ship in every new-format export but CLUTCH doesn't read
+        // them. Classifying them explicitly keeps hundreds of unused files out
+        // of the detected-file counts instead of letting them inflate the tally.
+        if (segs.includes('memories') || name.includes('memor')) out.memories.push(src);
+        else if (name.includes('manifest')) out.manifests.push(src);
+        else if (segs.includes('design_chats') || name.includes('design_chat')) out.designs.push(src);
+        else if (segs.includes('projects') || name.includes('project')) out.projects.push(src);
+        else if (name.includes('user')) out.users = src;
+        else if (name.includes('conversation')) out.convs.push(src);
       });
+      return out;
+    }
 
+    function setDetectedRow(rowId, valId, value, optional) {
+      const row = document.getElementById(rowId);
+      const val = document.getElementById(valId);
+      const has = Array.isArray(value) ? value.length > 0 : !!value;
+      if (has) {
+        row.classList.add('found'); row.classList.remove('missing');
+        val.textContent = Array.isArray(value) ? value.join(', ') : value;
+      } else {
+        row.classList.add('missing'); row.classList.remove('found');
+        val.textContent = optional ? 'Not found (optional)' : 'Not found';
+      }
+    }
+
+    function setMemoriesRow(count) {
+      const row = document.getElementById('det-memories');
+      if (!count) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      row.classList.remove('missing', 'found');
+      document.getElementById('det-memories-val').textContent =
+        count.toLocaleString() + ' file' + (count !== 1 ? 's' : '') + ' (not used by CLUTCH)';
+    }
+
+    // Entry point for every bulk-load gesture: the .zip picker, the folder
+    // picker, and a drop on the export zone.
+    async function handleExportSelect(files) {
+      const zipFiles = files.filter(f => /\.zip$/i.test(f.name));
+      const looseFiles = files.filter(f => /\.(json|csv)$/i.test(f.name));
+      if (!zipFiles.length && !looseFiles.length) {
+        showError('No .zip, .json or .csv files found in the selection.');
+        return;
+      }
+
+      const status = document.getElementById('folder-status');
       document.getElementById('folder-zone').classList.add('loaded');
-      document.getElementById('folder-status').textContent = jsonFiles.length + ' JSON file' + (jsonFiles.length !== 1 ? 's' : '') + ' found';
       document.getElementById('detected-files').classList.remove('hidden');
 
-      const setRow = (rowId, valId, file, optional) => {
-        const row = document.getElementById(rowId);
-        if (file) {
-          row.classList.add('found'); row.classList.remove('missing');
-          document.getElementById(valId).textContent = Array.isArray(file) ? file.map(f => f.name).join(', ') : file.name;
-        } else {
-          row.classList.add('missing');
-          document.getElementById(valId).textContent = optional ? 'Not found (optional)' : 'Not found';
+      // A selection containing archives defines the archive set; a manifest-only
+      // selection leaves the previously loaded list intact so the checklist can
+      // be added after the data.
+      if (zipFiles.length) loadedArchives = [];
+
+      const sources = [];
+      for (let i = 0; i < zipFiles.length; i++) {
+        const zf = zipFiles[i];
+        status.textContent = 'Reading ' + zf.name + ' (' + (i + 1) + ' of ' + zipFiles.length + ')...';
+        try {
+          const zip = await JSZip.loadAsync(zf);
+          Object.values(zip.files).forEach(entry => {
+            if (entry.dir || entry.name.includes('__MACOSX')) return;
+            sources.push(sourceFromZipEntry(entry, zf.name));
+          });
+          loadedArchives.push(zf.name);
+        } catch (err) {
+          // One unreadable archive shouldn't sink the rest of the export.
+          showError('Error reading ' + zf.name + ': ' + err.message);
         }
+      }
+      looseFiles.forEach(f => sources.push(sourceFromFile(f)));
+
+      const parts = [];
+      if (loadedArchives.length) parts.push(loadedArchives.length + ' archive' + (loadedArchives.length !== 1 ? 's' : ''));
+      if (looseFiles.length) parts.push(looseFiles.length + ' file' + (looseFiles.length !== 1 ? 's' : ''));
+      await loadFromSources(sources, parts.join(' + '));
+    }
+
+    // Reads a classified pool sequentially. Sequential is deliberate: a
+    // new-format conversations.json inflates to 150 MB+, so entries are read
+    // and parsed one at a time rather than concurrently. Conversations go last
+    // so every other inflated string has been released by the time it runs.
+    // (The archives themselves stay held in compressed form — tens of MB — it's
+    // the inflated text that needs to be kept to one at a time.)
+    async function loadFromSources(sources, statusLabel) {
+      const c = classifySources(sources);
+      const usable = (c.users ? 1 : 0) + c.convs.length + c.projects.length +
+                     c.designs.length + c.csvs.length + c.manifests.length;
+      if (!usable) {
+        showError('No usable JSON or CSV files found in the selection.');
+        document.getElementById('folder-status').textContent = 'Nothing recognised';
+        return;
+      }
+
+      let errored = false;
+      const fail = msg => { errored = true; showError(msg); };
+
+      document.getElementById('folder-status').textContent = statusLabel;
+      setDetectedRow('det-users', 'det-users-val', c.users ? c.users.name : null, false);
+      setDetectedRow('det-convs', 'det-convs-val', c.convs.map(s => s.name), false);
+      setCountRow('det-projects', 'det-projects-val', c.projects.length, 'project');
+      setCountRow('det-designs', 'det-designs-val', c.designs.length, 'design chat');
+      setMemoriesRow(c.memories.length);
+
+      for (const src of c.manifests) {
+        try { ingestManifest(await src.readText(), src.name); }
+        catch (e) { fail('Error reading manifest ' + src.name + ': ' + e.message); }
+      }
+
+      if (c.users) {
+        try {
+          const json = JSON.parse(await c.users.readText());
+          if (looksLikeManifest(json)) {
+            // An oddly named manifest can reach the users slot; reroute it.
+            ingestManifestJson(json, c.users.name);
+            setDetectedRow('det-users', 'det-users-val', null, false);
+          } else {
+            usersData = Array.isArray(json) ? json : [json];
+            document.getElementById('user-status').textContent = '✓ ' + usersData.length.toLocaleString() + ' users';
+            document.getElementById('user-zone').classList.add('loaded');
+            autoDetectUserFields();
+          }
+        } catch (e) { fail('Error parsing users: ' + e.message); }
+      }
+
+      if (c.projects.length) {
+        projectsData = [];
+        for (const src of c.projects) {
+          try {
+            const j = JSON.parse(await src.readText());
+            if (Array.isArray(j)) projectsData = projectsData.concat(j);
+            else projectsData.push(j);
+          } catch (e) { /* skip unreadable project file */ }
+        }
+        document.getElementById('proj-status').textContent = '✓ ' + projectsData.length.toLocaleString() + ' projects';
+        document.getElementById('proj-zone').classList.add('loaded');
+        buildProjectMap();
+      }
+
+      if (c.designs.length) {
+        designConvs = [];
+        for (const src of c.designs) {
+          try { ingestDesignChat(await src.readText()); }
+          catch (e) { /* skip unreadable design chat */ }
+        }
+        const n = designConvs.length;
+        document.getElementById('design-status').textContent = '✓ ' + n.toLocaleString() + ' design chat' + (n !== 1 ? 's' : '');
+        document.getElementById('design-zone').classList.add('loaded');
+        setDesignRow(n);
+      }
+
+      if (c.csvs.length) {
+        const csvs = [];
+        for (const src of c.csvs) {
+          try { csvs.push({ name: src.name, text: await src.readText() }); }
+          catch (e) { /* skip unreadable csv */ }
+        }
+        csvs.forEach(x => { x.kind = classifyCsvName(x.name) || classifyCsvHeader(x.text); });
+        const members = csvs.find(x => x.kind === 'members');
+        const spend = csvs.find(x => x.kind === 'spend') ||
+          (csvs.length === 1 && !csvs[0].kind ? csvs[0] : null);
+        if (members) {
+          try { ingestClassifiedCsv(members.text, members.name, 'members'); }
+          catch (e) { fail('Error parsing members analytics: ' + e.message); }
+        }
+        if (spend) {
+          try { ingestClassifiedCsv(spend.text, spend.name, 'spend'); }
+          catch (e) { fail('Error parsing spend report: ' + e.message); }
+        }
+      }
+
+      if (c.convs.length) {
+        conversationsData = [];
+        loadedFiles = [];
+        for (const src of c.convs) {
+          try {
+            const json = JSON.parse(await src.readText());
+            const data = Array.isArray(json) ? json : [json];
+            conversationsData = conversationsData.concat(data);
+            loadedFiles.push({ name: src.name, count: data.length });
+          } catch (e) { fail('Error parsing ' + src.name + ': ' + e.message); }
+        }
+        document.getElementById('conv-status').textContent =
+          '✓ ' + conversationsData.length.toLocaleString() + ' conversations' +
+          (c.convs.length > 1 ? ' (' + c.convs.length + ' files)' : '');
+        document.getElementById('conv-zone').classList.add('loaded');
+        autoDetectConvField();
+      }
+
+      renderManifestCheck();
+      if (!errored) hideError();
+      checkBothLoaded();
+    }
+
+    // ─── Export manifest ────────────────────────────────────────────────────
+    // New-format exports ship manifest-<org>-<timestamp>.json alongside several
+    // separate archives. CLUTCH treats it purely as metadata — a checklist of
+    // what the export contained versus what has been loaded. It never fetches
+    // the URLs: the page runs from file:// and the export endpoint returns no
+    // Access-Control-Allow-Origin (plus Cross-Origin-Resource-Policy:
+    // same-origin), so a browser fetch is impossible by construction — and each
+    // link is single-use anyway. The links are rendered for the admin to click
+    // in their own authenticated session.
+
+    const MANIFEST_UNUSED_CATEGORIES = ['memories'];
+
+    function looksLikeManifest(json) {
+      return !!json && Array.isArray(json.data_files) && json.data_files.some(f => f && f.export_url);
+    }
+
+    function ingestManifestJson(json, fileName) {
+      if (!looksLikeManifest(json)) throw new Error('not an export manifest');
+      manifestData = {
+        fileName,
+        createdAt: json.created_at || '',
+        totalFiles: json.total_files || json.data_files.length,
+        files: json.data_files
       };
+    }
 
-      setRow('det-users', 'det-users-val', usersFile, false);
-      setRow('det-convs', 'det-convs-val', convFiles.length ? convFiles : null, false);
-      setCountRow('det-projects', 'det-projects-val', projFiles.length, 'project');
-      setCountRow('det-designs', 'det-designs-val', designFiles.length, 'design chat');
+    function ingestManifest(text, fileName) { ingestManifestJson(JSON.parse(text), fileName); }
 
-      if (usersFile) loadUserFile(usersFile);
-      if (convFiles.length) loadConvFiles(convFiles);
-      if (projFiles.length) loadProjectFiles(projFiles);
-      if (designFiles.length) loadDesignFiles(designFiles);
-      if (spendFile) loadSpendFile(spendFile);
-      if (membersFile) loadMembersFile(membersFile);
-      if (unknownCsv) loadCsvFile(unknownCsv);
+    function renderManifestCheck() {
+      const box = document.getElementById('manifest-check');
+      if (!manifestData) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+
+      const groups = {};
+      manifestData.files.forEach(f => {
+        const cat = (f && f.category) || 'other';
+        (groups[cat] = groups[cat] || []).push(f);
+      });
+
+      const loaded = loadedArchives.map(n => n.toLowerCase());
+      const isLoaded = p => loaded.includes(String((p && p.filename) || '').toLowerCase());
+      let missing = 0;
+
+      const rows = Object.keys(groups).sort().map(cat => {
+        const parts = groups[cat];
+        const have = parts.filter(isLoaded);
+        const partLabel = have.length + ' of ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '');
+
+        if (MANIFEST_UNUSED_CATEGORIES.indexOf(cat) !== -1) {
+          return '<div class="mf-row skip"><span class="mf-mark">—</span>' +
+                 '<span class="mf-cat">' + escapeHtml(cat) + '</span>' +
+                 '<span class="mf-parts">not used by CLUTCH</span></div>';
+        }
+        if (have.length === parts.length) {
+          return '<div class="mf-row ok"><span class="mf-mark">✓</span>' +
+                 '<span class="mf-cat">' + escapeHtml(cat) + '</span>' +
+                 '<span class="mf-parts">' + partLabel + '</span></div>';
+        }
+        missing++;
+        const links = parts.filter(p => !isLoaded(p)).map(p =>
+          '<a href="' + escapeHtml((p && p.export_url) || '#') + '" target="_blank" rel="noopener">' +
+          escapeHtml((p && p.filename) || 'download') + '</a>'
+        ).join(' ');
+        return '<div class="mf-row gone"><span class="mf-mark">✗</span>' +
+               '<span class="mf-cat">' + escapeHtml(cat) + '</span>' +
+               '<span class="mf-parts">' + partLabel + '</span>' + links + '</div>';
+      });
+
+      let created = manifestData.createdAt;
+      if (created) { const d = new Date(created); if (!isNaN(d)) created = d.toLocaleString(); }
+
+      let html = '<div class="mf-head">📋 Export manifest — ' + manifestData.totalFiles +
+                 ' files' + (created ? ', created ' + escapeHtml(created) : '') + '</div>' + rows.join('');
+      if (missing) {
+        html += '<div class="mf-note">Download links work once only. If a link fails, re-export from ' +
+                'Settings → Organisation → Export data.</div>';
+      }
+      box.innerHTML = html;
+      box.classList.remove('hidden');
     }
 
     function loadProjectFiles(files) {
@@ -1979,8 +2135,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('conv-status').textContent = 'Click or drag & drop';
       document.getElementById('proj-status').textContent = 'Click or drag & drop';
       document.getElementById('design-status').textContent = 'Click or drag & drop';
-      document.getElementById('folder-status').textContent = 'Click to select your Claude Teams export folder \u2014 files are detected automatically';
+      document.getElementById('folder-status').textContent = 'Select all the .zip files from your export (or the folder containing them) \u2014 files are detected automatically';
       document.getElementById('detected-files').classList.add('hidden');
+      document.getElementById('manifest-check').classList.add('hidden');
+      document.getElementById('manifest-check').innerHTML = '';
+      document.getElementById('det-memories-val').textContent = '\u2014';
+      document.getElementById('det-memories').style.display = 'none';
       document.getElementById('load-btn-container').classList.add('hidden');
       document.getElementById('user-input').value = '';
       document.getElementById('conv-input').value = '';
@@ -1991,6 +2151,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       projectsData = [];
       projectMap = {};
       designConvs = [];
+      manifestData = null;
+      loadedArchives = [];
       spendRows = [];
       spendByUser = {};
       spendMeta = null;
